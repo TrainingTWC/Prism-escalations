@@ -4,9 +4,8 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard, Ticket, Store, Users, BarChart3,
-  AlertTriangle, LogOut, ChevronLeft, Home, Brain,
+  AlertTriangle, ChevronLeft, Home, Brain, Search,
 } from 'lucide-react'
-import { useAuthStore } from '@/store/auth.store'
 import { useSidebar, SIDEBAR_WIDTH, SIDEBAR_WIDTH_COLLAPSED } from '@/lib/sidebar-context'
 import { cn } from '@/lib/cn'
 import { PrismLogo } from '@/components/ui/PrismLogo'
@@ -33,7 +32,6 @@ const ADMIN_NAV: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { profile, signOut } = useAuthStore()
   const { collapsed, toggle, width } = useSidebar()
 
   const isActive = (href: string) =>
@@ -94,8 +92,34 @@ export function Sidebar() {
         </div>
       </div>
 
+      {/* Product heading + search */}
+      {!collapsed && (
+        <div className="px-4 pt-5 pb-4 flex flex-col gap-4 shrink-0">
+          <h2 className="text-[20px] font-extrabold tracking-tight text-[var(--text-primary)] leading-none">
+            Prism Escalations
+          </h2>
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"
+            />
+            <input
+              type="text"
+              placeholder="Search Prism Escalations…"
+              className="prism-input pl-9 h-9"
+              style={{ fontSize: 12 }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Nav */}
       <nav className={cn('flex-1 overflow-y-auto py-4 flex flex-col gap-0.5', collapsed ? 'px-3' : 'px-3')}>
+        {!collapsed && (
+          <div className="px-3 mb-2 text-[9px] font-bold uppercase tracking-[0.20em] text-[var(--text-muted)]">
+            Menu
+          </div>
+        )}
         {PRIMARY_NAV.map(renderNavItem)}
 
         <div className={cn('mt-5 mb-2', collapsed ? 'px-0 text-center' : 'px-3')}>
@@ -111,57 +135,18 @@ export function Sidebar() {
         {ADMIN_NAV.map(renderNavItem)}
       </nav>
 
-      {/* Bottom: user + actions */}
-      <div className="px-3 py-3 border-t border-[var(--sidebar-border)] flex flex-col gap-2 shrink-0">
-        {profile && !collapsed && (
-          <div
-            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2"
-            style={{ background: 'var(--card-bg)', border: '1px solid var(--border-subtle)' }}
-          >
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0"
-              style={{
-                background: 'linear-gradient(135deg, var(--color-ember-500) 0%, var(--color-ember-400) 100%)',
-                color: '#1A0E05',
-              }}
-            >
-              {profile.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0 leading-tight">
-              <div className="text-[12px] font-semibold text-[var(--text-primary)] truncate">
-                {profile.name}
-              </div>
-              <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--accent)] truncate">
-                {profile.role.replace(/_/g, ' ')}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className={cn('flex gap-1', collapsed ? 'flex-col' : 'flex-row')}>
-          <button
-            onClick={signOut}
-            title="Sign out"
-            className={cn(
-              'h-9 rounded-lg flex items-center justify-center gap-2 text-[12px] text-[var(--text-tertiary)] hover:text-[var(--color-danger)] hover:bg-[var(--card-bg-hover)] transition-colors',
-              collapsed ? 'w-full' : 'flex-1 px-3',
-            )}
-          >
-            <LogOut size={14} />
-            {!collapsed && <span>Sign out</span>}
-          </button>
-
-          <button
-            onClick={toggle}
-            title={collapsed ? 'Expand' : 'Collapse'}
-            className={cn(
-              'h-9 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--card-bg-hover)] transition-colors',
-              collapsed ? 'w-full' : 'w-9',
-            )}
-          >
-            <ChevronLeft size={14} className={cn('transition-transform', collapsed && 'rotate-180')} />
-          </button>
-        </div>
+      {/* Bottom: collapse toggle */}
+      <div className="px-3 py-3 border-t border-[var(--sidebar-border)] shrink-0">
+        <button
+          onClick={toggle}
+          title={collapsed ? 'Expand' : 'Collapse'}
+          className={cn(
+            'w-full h-9 rounded-lg flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--card-bg-hover)] transition-colors',
+          )}
+        >
+          <ChevronLeft size={14} className={cn('transition-transform', collapsed && 'rotate-180')} />
+          {!collapsed && <span>Collapse</span>}
+        </button>
       </div>
     </aside>
   )

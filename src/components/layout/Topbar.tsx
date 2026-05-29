@@ -1,12 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { Bell, Plus, Search, Sun, Moon } from 'lucide-react'
+import { Bell, Plus, Search, Sun, Moon, KeyRound, LogOut } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import { useTheme } from '@/lib/theme-context'
 
 export function Topbar() {
-  const { profile } = useAuthStore()
+  const { profile, signOut } = useAuthStore()
   const { theme, toggleTheme } = useTheme()
 
   return (
@@ -87,12 +87,6 @@ export function Topbar() {
             className="flex items-center gap-2 pl-3 ml-1"
             style={{ borderLeft: '1px solid var(--border-subtle)' }}
           >
-            <div className="hidden md:block text-right leading-tight">
-              <div className="text-[12px] font-semibold text-[var(--text-primary)]">{profile.name}</div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.10em] text-[var(--accent)]">
-                {profile.role.replace(/_/g, ' ')}
-              </div>
-            </div>
             <div
               className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold"
               style={{
@@ -102,6 +96,42 @@ export function Topbar() {
             >
               {profile.name.charAt(0).toUpperCase()}
             </div>
+            <div className="hidden md:block text-left leading-tight">
+              <div className="text-[12px] font-semibold text-[var(--text-primary)] truncate max-w-[140px]">
+                {profile.name}
+              </div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.10em] text-[var(--accent)] truncate max-w-[140px]">
+                {profile.role.replace(/_/g, ' ')}
+              </div>
+            </div>
+
+            <Link
+              href="/team"
+              aria-label="Account"
+              title="Account"
+              className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors"
+              style={{
+                background: 'var(--card-bg)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              <KeyRound size={14} />
+            </Link>
+
+            <button
+              onClick={signOut}
+              aria-label="Sign out"
+              title="Sign out"
+              className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:text-[var(--color-danger)]"
+              style={{
+                background: 'var(--card-bg)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-tertiary)',
+              }}
+            >
+              <LogOut size={14} />
+            </button>
           </div>
         )}
       </div>
