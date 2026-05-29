@@ -76,14 +76,14 @@ function AppShellInner({ children, title, subtitle, overline, actions, bare = fa
         <footer
           className="px-6 lg:px-10 py-5 text-[10px] tracking-[0.18em] uppercase"
           style={{
-            color: 'var(--text-muted)',
+            color: 'var(--text-secondary)',
             borderTop: '1px solid var(--border-subtle)',
-            background: 'rgba(9,9,11,0.4)',
+            background: 'var(--bg-secondary)',
           }}
         >
           <div className="max-w-[1400px] mx-auto flex items-center justify-between flex-wrap gap-2">
-            <span className="opacity-80">© 2026 Prism Intelligence</span>
-            <span className="opacity-60">Operational Platform · v0.1</span>
+            <span>© 2026 Prism Intelligence</span>
+            <span className="opacity-70">Operational Platform · v0.1</span>
           </div>
         </footer>
       </div>
