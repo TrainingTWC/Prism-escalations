@@ -49,6 +49,7 @@ export interface AiAnomaly {
 export interface AiInsightReport {
   generatedAt: string
   model?: string
+  mode?: string
   headline: string
   healthScore: number
   healthLabel: string
@@ -58,6 +59,53 @@ export interface AiInsightReport {
   recommendations: AiRecommendation[]
   risks: AiRisk[]
   anomalies: AiAnomaly[]
+}
+
+// ─── Deep Research report contract (kimi-k2.6 strategist dive) ─────────────────
+export interface AiRootCause {
+  title: string
+  analysis: string
+  evidence?: string
+  confidence?: number
+}
+export interface AiStrategicPlay {
+  title: string
+  rationale: string
+  steps: string[]
+  expectedOutcome?: string
+  effort?: 'low' | 'medium' | 'high'
+  priority?: 'low' | 'medium' | 'high' | 'urgent'
+  horizon?: string
+}
+export interface AiScenario {
+  name: string
+  probability?: number
+  narrative: string
+  impact?: 'low' | 'medium' | 'high' | 'severe'
+}
+export interface AiKpiTarget {
+  metric: string
+  current: string
+  target: string
+  timeframe?: string
+}
+export interface AiWatchItem {
+  item: string
+  why: string
+  trigger?: string
+}
+export interface AiDeepReport {
+  generatedAt: string
+  model?: string
+  mode?: string
+  executiveSummary: string
+  situationAssessment: string
+  rootCauses: AiRootCause[]
+  strategicPlays: AiStrategicPlay[]
+  scenarios: AiScenario[]
+  kpiTargets: AiKpiTarget[]
+  watchList: AiWatchItem[]
+  bottomLine: string
 }
 
 // ─── Deterministic snapshot (computed client-side, sent to the model) ──────────
@@ -208,7 +256,7 @@ export function buildAnalyticsSnapshot(tickets: AnalyticsTicket[]): AnalyticsSna
 // ─── Invoke the secure Edge Function proxy ─────────────────────────────────────
 export async function requestAiInsights(snapshot: AnalyticsSnapshot): Promise<AiInsightReport> {
   const { data, error } = await supabase.functions.invoke('ai-insights', {
-    body: { snapshot },
+    body: { snapshot, mode: 'fast' },
   })
 
   if (error) {
@@ -222,6 +270,7 @@ export async function requestAiInsights(snapshot: AnalyticsSnapshot): Promise<Ai
   return {
     generatedAt: report.generatedAt ?? new Date().toISOString(),
     model: report.model,
+    mode: report.mode,
     headline: report.headline ?? 'No headline produced',
     healthScore: typeof report.healthScore === 'number' ? Math.max(0, Math.min(100, report.healthScore)) : 0,
     healthLabel: report.healthLabel ?? '—',
@@ -231,5 +280,38 @@ export async function requestAiInsights(snapshot: AnalyticsSnapshot): Promise<Ai
     recommendations: Array.isArray(report.recommendations) ? report.recommendations : [],
     risks: Array.isArray(report.risks) ? report.risks : [],
     anomalies: Array.isArray(report.anomalies) ? report.anomalies : [],
+  }
+}
+
+// ─── Deep Research — kimi-k2.6 strategist dive (user-triggered, ~1-2 min) ──────
+export async function requestDeepResearch(
+  snapshot: AnalyticsSnapshot,
+  baseReport: AiInsightReport | null,
+): Promise<AiDeepReport> {
+  const { data, error } = await supabase.functions.invoke('ai-insights', {
+    body: { snapshot, mode: 'deep', baseReport },
+  })
+
+  if (error) {
+    throw new Error(error.message || 'Deep research request failed')
+  }
+  const report = (data as { report?: AiDeepReport })?.report
+  if (!report) {
+    throw new Error('Deep research returned no report')
+  }
+  return {
+    generatedAt: report.generatedAt ?? new Date().toISOString(),
+    model: report.model,
+    mode: report.mode,
+    executiveSummary: report.executiveSummary ?? '',
+    situationAssessment: report.situationAssessment ?? '',
+    rootCauses: Array.isArray(report.rootCauses) ? report.rootCauses : [],
+    strategicPlays: Array.isArray(report.strategicPlays)
+      ? report.strategicPlays.map((p) => ({ ...p, steps: Array.isArray(p.steps) ? p.steps : [] }))
+      : [],
+    scenarios: Array.isArray(report.scenarios) ? report.scenarios : [],
+    kpiTargets: Array.isArray(report.kpiTargets) ? report.kpiTargets : [],
+    watchList: Array.isArray(report.watchList) ? report.watchList : [],
+    bottomLine: report.bottomLine ?? '',
   }
 }

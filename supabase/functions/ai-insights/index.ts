@@ -4,15 +4,20 @@
 // chat/completions). The NVIDIA API key NEVER reaches the browser — it is read
 // from the NVIDIA_API_KEY secret at runtime.
 //
-// The client (src/lib/intelligence/analytics-ai.ts) sends a compact, aggregated
-// "snapshot" of ticket metrics. This function asks the model to return a strict
-// JSON operational-intelligence report (insights / predictions / recommendations
-// / risks / anomalies) and relays it back.
+// Two analysis modes:
+//   • mode: "fast" (default)  → meta/llama-3.3-70b-instruct  (~30-40s)
+//        The instant operational briefing rendered on page load.
+//   • mode: "deep"            → moonshotai/kimi-k2.6          (~1-2 min)
+//        A user-triggered "Deep Research" dive that takes the fast report +
+//        the snapshot and produces a rigorous strategist-grade analysis:
+//        root-cause reasoning, strategic plays with step plans, scenario
+//        planning, KPI targets and a watch-list.
 //
 // Deploy:
 //   supabase functions deploy ai-insights
 //   supabase secrets set NVIDIA_API_KEY=nvapi-xxxxxxxx
-//   (optional) supabase secrets set NVIDIA_MODEL=moonshotai/kimi-k2.6
+//   (optional) supabase secrets set NVIDIA_FAST_MODEL=meta/llama-3.3-70b-instruct
+//   (optional) supabase secrets set NVIDIA_DEEP_MODEL=moonshotai/kimi-k2.6
 //
 // JWT verification is left ON (default) so only authenticated app users can call it.
 // ---------------------------------------------------------------------------
@@ -20,7 +25,8 @@
 // deno-lint-ignore-file no-explicit-any
 
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const DEFAULT_MODEL = "meta/llama-3.3-70b-instruct";
+const FAST_MODEL = "meta/llama-3.3-70b-instruct";
+const DEEP_MODEL = "moonshotai/kimi-k2.6";
 
 const ALLOWED_ORIGINS = [
   "https://escalations.prismintelligence.in",
@@ -39,36 +45,41 @@ function corsHeaders(origin: string | null): Record<string, string> {
   };
 }
 
-const SYSTEM_PROMPT = `You are the analytics intelligence engine for "Prism Escalations", a multi-store
+// ─── FAST MODE — instant briefing ──────────────────────────────────────────────
+const FAST_SYSTEM_PROMPT = `You are the analytics intelligence engine for "Prism Escalations", a multi-store
 operational escalation and SLA-management platform. You receive an AGGREGATED, anonymised
 snapshot of ticket metrics (no personal data) and must produce a rigorous, decision-grade
 operational intelligence report.
 
-Operating philosophy: AI must REDUCE operational friction, not produce chatbot theater.
-Every statement must be grounded in the numbers provided. Be specific, quantitative, and
-actionable. Reference concrete figures (counts, percentages, store codes, categories) from
-the snapshot. Never invent data that is not present. If signal is weak, say so and lower
-your confidence rather than fabricating.
+Operating philosophy: AI must REDUCE operational friction, not produce chatbot theatre.
+Every statement must be grounded in the numbers provided. Be specific, quantitative and
+sharp. ALWAYS cite concrete figures from the snapshot — exact counts, percentages, store
+codes, category names, aging buckets, trend deltas. Never invent data. Never write generic
+filler like "monitor the situation" or "keep up the good work". If a number is notable,
+name it and say what it means for operations. If signal is weak, say so and lower confidence
+rather than fabricating.
+
+Voice: a senior operations analyst briefing a regional director. Crisp, concrete, no fluff.
 
 You MUST respond with a single valid JSON object and NOTHING else (no markdown, no prose,
 no code fences). Conform EXACTLY to this schema:
 
 {
-  "headline": "string — one punchy sentence (<=110 chars) summarising the single most important finding",
-  "healthScore": number,            // 0-100 overall operational health (higher = healthier)
+  "headline": "string — one punchy, SPECIFIC sentence (<=110 chars) naming the single most important finding WITH a number",
+  "healthScore": number,            // 0-100 overall operational health (higher = healthier). Be discerning — reserve >80 for genuinely strong ops.
   "healthLabel": "string",          // e.g. "Stable", "Under pressure", "Critical"
-  "summary": "string — 2-4 sentence narrative of the current operational state",
-  "insights": [                      // 3-5 grounded observations of what is happening and why
-    { "title": "string", "detail": "string", "metric": "string", "severity": "info|warning|critical" }
+  "summary": "string — 2-4 sentence narrative of the current operational state, citing specific figures",
+  "insights": [                      // 3-5 grounded observations, each citing a real number
+    { "title": "string", "detail": "string", "metric": "string — the exact figure(s) this is based on", "severity": "info|warning|critical" }
   ],
-  "predictions": [                   // 2-4 forward-looking forecasts
+  "predictions": [                   // 2-4 forward-looking forecasts grounded in the trend/aging data
     { "title": "string", "detail": "string", "timeframe": "string", "likelihood": "low|medium|high", "confidence": number }
   ],
-  "recommendations": [               // 3-5 concrete actions, most impactful first
-    { "title": "string", "detail": "string", "priority": "low|medium|high|urgent", "expectedImpact": "string" }
+  "recommendations": [               // 3-5 concrete, specific actions, most impactful first
+    { "title": "string", "detail": "string", "priority": "low|medium|high|urgent", "expectedImpact": "string — quantify if possible" }
   ],
-  "risks": [                         // 2-4 risk-radar entries
-    { "area": "string", "signal": "string", "severity": "low|medium|high|critical" }
+  "risks": [                         // 2-4 risk-radar entries tied to specific signals
+    { "area": "string", "signal": "string — cite the number", "severity": "low|medium|high|critical" }
   ],
   "anomalies": [                     // 0-3 statistical outliers / unusual spikes; empty array if none
     { "title": "string", "detail": "string" }
@@ -77,16 +88,88 @@ no code fences). Conform EXACTLY to this schema:
 
 Rules:
 - "confidence" is a number 0-100.
-- Keep every "detail" under 240 characters.
+- Keep every "detail" under 240 characters but make every word earn its place.
 - Order arrays by importance (most important first).
 - Do NOT wrap the JSON in markdown fences.`;
 
-function buildUserPrompt(snapshot: unknown): string {
+// ─── DEEP MODE — strategist-grade research dive ────────────────────────────────
+const DEEP_SYSTEM_PROMPT = `You are the Chief Operations Strategist for "Prism Escalations", a multi-store
+escalation and SLA-management platform. A junior analyst has already produced a fast
+first-pass briefing (provided to you). Your job is to go FAR DEEPER: think like a
+McKinsey operations partner combined with a data scientist. Interrogate the numbers,
+expose root causes, war-game scenarios, and lay out a concrete action roadmap.
+
+You receive (1) the aggregated, anonymised metrics snapshot and (2) the fast briefing.
+Treat the fast briefing as a starting hypothesis to PRESSURE-TEST and EXTEND, not repeat.
+
+Mandate:
+- Reason causally. For every problem, ask "why" until you hit a structural driver
+  (staffing, routing, category mix, store-level patterns, SLA policy, aging dynamics).
+- Be ruthlessly specific and quantitative. Cite exact counts, %, store codes, categories,
+  aging buckets, MTTR, reopen rate, trend deltas. Do arithmetic where it sharpens the point.
+- Surface non-obvious connections (e.g. "the 7d+ aging bucket is dominated by HR tickets,
+  which also drive the reopen rate — suggesting a triage-quality gap, not a volume problem").
+- War-game the next 30 days with best/likely/worst scenarios and probabilities.
+- Give an executable roadmap: each play has concrete sequential steps a manager can action.
+- No platitudes. No "continue monitoring". Every sentence must carry analytical weight.
+
+Voice: incisive, confident, evidence-led. You are the smartest person in the room and it shows.
+
+You MUST respond with a single valid JSON object and NOTHING else (no markdown fences).
+Conform EXACTLY to this schema:
+
+{
+  "executiveSummary": "string — 3-5 sentences. The strategic story of what is really happening and why it matters. Lead with the sharpest insight.",
+  "situationAssessment": "string — 3-5 sentences of deep diagnostic read of the current operational state, connecting multiple metrics into one coherent picture.",
+  "rootCauses": [                    // 2-4 structural drivers behind the headline problems
+    { "title": "string", "analysis": "string — the causal chain, <=320 chars", "evidence": "string — the exact figures that support it", "confidence": number }
+  ],
+  "strategicPlays": [                // 3-5 high-leverage moves, most impactful first
+    {
+      "title": "string",
+      "rationale": "string — why this, why now, <=260 chars",
+      "steps": ["string — concrete sequential action", "string", "string"],
+      "expectedOutcome": "string — quantify the target effect",
+      "effort": "low|medium|high",
+      "priority": "low|medium|high|urgent",
+      "horizon": "string — e.g. 'This week', '30 days', 'Quarter'"
+    }
+  ],
+  "scenarios": [                     // exactly 3: best case, most likely, worst case (in that order)
+    { "name": "string — e.g. 'Best case'", "probability": number, "narrative": "string — what unfolds over 30 days, <=300 chars", "impact": "low|medium|high|severe" }
+  ],
+  "kpiTargets": [                    // 3-5 metrics to drive, with concrete targets
+    { "metric": "string", "current": "string", "target": "string", "timeframe": "string" }
+  ],
+  "watchList": [                     // 2-4 leading indicators to watch with trigger thresholds
+    { "item": "string", "why": "string", "trigger": "string — the threshold that should sound an alarm" }
+  ],
+  "bottomLine": "string — one decisive closing sentence: the single most important thing to do now."
+}
+
+Rules:
+- "confidence" and "probability" are numbers 0-100. The three scenario probabilities should be plausible (need not sum to 100).
+- Order arrays by importance.
+- Be concrete and numeric throughout. Do NOT wrap the JSON in markdown fences.`;
+
+function buildFastUserPrompt(snapshot: unknown): string {
   return [
-    "Analyse the following operational snapshot and return the JSON report.",
+    "Analyse the following operational snapshot and return the fast briefing JSON.",
     "",
     "SNAPSHOT (JSON):",
     JSON.stringify(snapshot, null, 2),
+  ].join("\n");
+}
+
+function buildDeepUserPrompt(snapshot: unknown, baseReport: unknown): string {
+  return [
+    "Produce the deep research JSON. Pressure-test and extend the fast briefing using the full snapshot.",
+    "",
+    "METRICS SNAPSHOT (JSON):",
+    JSON.stringify(snapshot, null, 2),
+    "",
+    "FAST FIRST-PASS BRIEFING (JSON) — your starting hypothesis to deepen, not repeat:",
+    JSON.stringify(baseReport ?? {}, null, 2),
   ].join("\n");
 }
 
@@ -130,21 +213,33 @@ Deno.serve(async (req: Request) => {
       { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
     );
   }
-  const model = Deno.env.get("NVIDIA_MODEL") || DEFAULT_MODEL;
 
   let snapshot: unknown;
+  let baseReport: unknown = null;
+  let mode = "fast";
   try {
     const body = await req.json();
     snapshot = body?.snapshot ?? body;
+    baseReport = body?.baseReport ?? null;
+    if (body?.mode === "deep") mode = "deep";
     if (!snapshot || typeof snapshot !== "object") {
       throw new Error("missing snapshot");
     }
   } catch {
     return new Response(
-      JSON.stringify({ error: "Invalid request body — expected { snapshot: {...} }" }),
+      JSON.stringify({ error: "Invalid request body — expected { snapshot: {...}, mode?, baseReport? }" }),
       { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
     );
   }
+
+  const isDeep = mode === "deep";
+  const model = isDeep
+    ? (Deno.env.get("NVIDIA_DEEP_MODEL") || DEEP_MODEL)
+    : (Deno.env.get("NVIDIA_FAST_MODEL") || FAST_MODEL);
+  const systemPrompt = isDeep ? DEEP_SYSTEM_PROMPT : FAST_SYSTEM_PROMPT;
+  const userPrompt = isDeep
+    ? buildDeepUserPrompt(snapshot, baseReport)
+    : buildFastUserPrompt(snapshot);
 
   try {
     const nvidiaRes = await fetch(NVIDIA_URL, {
@@ -157,11 +252,11 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         model,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: buildUserPrompt(snapshot) },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
         ],
-        max_tokens: 1500,
-        temperature: 0.4,
+        max_tokens: isDeep ? 3200 : 1500,
+        temperature: isDeep ? 0.5 : 0.4,
         top_p: 0.9,
         stream: false,
       }),
@@ -187,6 +282,7 @@ Deno.serve(async (req: Request) => {
     const report = extractJson(content);
     report.generatedAt = new Date().toISOString();
     report.model = model;
+    report.mode = mode;
 
     return new Response(JSON.stringify({ report }), {
       headers: { ...cors, "Content-Type": "application/json" },

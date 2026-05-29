@@ -11,10 +11,11 @@ import { format } from 'date-fns'
 import {
   Sparkles, Brain, TrendingUp, TrendingDown, AlertTriangle, Lightbulb,
   Target, Activity, RefreshCcw, ShieldAlert, Gauge, Zap, ArrowRight, Loader2,
+  Microscope, Telescope, GitBranch, Crosshair, Eye, Flag, CheckCircle2,
 } from 'lucide-react'
 import {
-  buildAnalyticsSnapshot, requestAiInsights,
-  type AnalyticsTicket, type AnalyticsSnapshot, type AiInsightReport,
+  buildAnalyticsSnapshot, requestAiInsights, requestDeepResearch,
+  type AnalyticsTicket, type AnalyticsSnapshot, type AiInsightReport, type AiDeepReport,
 } from '@/lib/intelligence/analytics-ai'
 
 // ─── tone helpers ──────────────────────────────────────────────────────────────
@@ -28,6 +29,13 @@ const PRIORITY_TONE: Record<string, string> = {
 const LIKELIHOOD_TONE: Record<string, string> = {
   low: '#22C55E', medium: '#F59E0B', high: '#EF4444',
 }
+const EFFORT_TONE: Record<string, string> = {
+  low: '#22C55E', medium: '#F59E0B', high: '#EF4444',
+}
+const IMPACT_TONE: Record<string, string> = {
+  low: '#22C55E', medium: '#F59E0B', high: '#E07B39', severe: '#EF4444',
+}
+const DEEP_ACCENT = '#8B5CF6'
 function tone(map: Record<string, string>, key?: string) {
   return (key && map[key]) || '#8B5CF6'
 }
@@ -103,6 +111,12 @@ export default function IntelligencePage() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
 
+  // Deep Research (kimi-k2.6) — user-triggered, slower, richer.
+  const [deep, setDeep] = useState<AiDeepReport | null>(null)
+  const [deepLoading, setDeepLoading] = useState(false)
+  const [deepError, setDeepError] = useState<string | null>(null)
+  const [deepElapsed, setDeepElapsed] = useState(0)
+
   useEffect(() => {
     const load = async () => {
       const PAGE = 1000
@@ -139,6 +153,29 @@ export default function IntelligencePage() {
       setAiLoading(false)
     }
   }
+
+  const runDeepResearch = async () => {
+    if (!snapshot) return
+    setDeepLoading(true)
+    setDeepError(null)
+    setDeep(null)
+    setDeepElapsed(0)
+    try {
+      const result = await requestDeepResearch(snapshot, report)
+      setDeep(result)
+    } catch (err) {
+      setDeepError(err instanceof Error ? err.message : 'Deep research failed')
+    } finally {
+      setDeepLoading(false)
+    }
+  }
+
+  // Elapsed timer while deep research runs (kimi can take 1-2 min).
+  useEffect(() => {
+    if (!deepLoading) return
+    const id = setInterval(() => setDeepElapsed((s) => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [deepLoading])
 
   // Auto-run once the snapshot is ready and there is data.
   useEffect(() => {
@@ -399,6 +436,17 @@ export default function IntelligencePage() {
         </>
       )}
 
+      {/* ── DEEP RESEARCH (kimi-k2.6) ───────────────────────────────────────── */}
+      {report && (
+        <DeepResearchSection
+          deep={deep}
+          loading={deepLoading}
+          error={deepError}
+          elapsed={deepElapsed}
+          onRun={runDeepResearch}
+        />
+      )}
+
       <div className="flex items-center justify-center">
         <Link href="/analytics" className="inline-flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors">
           View full analytics charts <ArrowRight size={13} />
@@ -422,4 +470,271 @@ function Stat({ label, value, icon, tone }: { label: string; value: string | num
 
 function Empty({ text }: { text: string }) {
   return <p className="text-[12px] text-[var(--text-muted)] text-center py-4">{text}</p>
+}
+
+// ─── Deep Research section (kimi-k2.6) ─────────────────────────────────────────
+const DEEP_STEPS = [
+  'Ingesting full metrics snapshot',
+  'Pressure-testing the fast briefing',
+  'Tracing root causes through the data',
+  'War-gaming 30-day scenarios',
+  'Drafting the strategic roadmap',
+  'Finalising KPI targets & watch-list',
+]
+
+function DeepResearchSection({
+  deep, loading, error, elapsed, onRun,
+}: {
+  deep: AiDeepReport | null
+  loading: boolean
+  error: string | null
+  elapsed: number
+  onRun: () => void
+}) {
+  const activeStep = Math.min(DEEP_STEPS.length - 1, Math.floor(elapsed / 12))
+
+  // ── Loading ────────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="rounded-[18px] p-6 mb-5 relative overflow-hidden animate-fadeInUp"
+        style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.12), rgba(224,123,57,0.06))', border: `1px solid ${DEEP_ACCENT}55` }}>
+        <div className="absolute -left-12 -bottom-12 w-52 h-52 rounded-full blur-3xl pulse-breach" style={{ background: 'rgba(139,92,246,0.22)' }} />
+        <div className="relative">
+          <div className="flex items-center gap-3 mb-5">
+            <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl animate-spin-slow" style={{ background: `${DEEP_ACCENT}22`, color: DEEP_ACCENT }}>
+              <Microscope size={20} />
+            </span>
+            <div>
+              <p className="text-[15px] font-black text-[var(--text-primary)]">Deep Research in progress</p>
+              <p className="text-[12px] text-[var(--text-muted)]">kimi-k2.6 is reasoning over your data · {elapsed}s elapsed</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2.5 max-w-md">
+            {DEEP_STEPS.map((s, i) => {
+              const done = i < activeStep
+              const active = i === activeStep
+              return (
+                <div key={i} className="flex items-center gap-2.5">
+                  {done ? (
+                    <CheckCircle2 size={16} style={{ color: '#22C55E' }} />
+                  ) : active ? (
+                    <Loader2 size={16} className="animate-spin" style={{ color: DEEP_ACCENT }} />
+                  ) : (
+                    <span className="w-4 h-4 rounded-full border" style={{ borderColor: 'var(--border-primary)' }} />
+                  )}
+                  <span className="text-[12px]" style={{ color: done || active ? 'var(--text-secondary)' : 'var(--text-muted)', fontWeight: active ? 700 : 400 }}>{s}</span>
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-[11px] text-[var(--text-muted)] mt-5">A full strategic dive typically takes 1–2 minutes. Hang tight.</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Idle / CTA ───────────────────────────────────────────────────────────────
+  if (!deep) {
+    return (
+      <div className="rounded-[18px] p-6 mb-5 relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.10), rgba(139,92,246,0.02))', border: `1px solid ${DEEP_ACCENT}40` }}>
+        <div className="absolute -right-10 -top-10 w-44 h-44 rounded-full blur-3xl" style={{ background: 'rgba(139,92,246,0.16)' }} />
+        <div className="relative flex flex-col lg:flex-row lg:items-center gap-5 justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg" style={{ background: `${DEEP_ACCENT}22`, color: DEEP_ACCENT }}>
+                <Telescope size={15} />
+              </span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: DEEP_ACCENT }}>Deep Research · kimi-k2.6</span>
+            </div>
+            <h3 className="text-[19px] lg:text-[22px] font-black text-[var(--text-primary)] mb-1.5">Go beyond the briefing</h3>
+            <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed max-w-2xl">
+              Unleash a strategist-grade dive: root-cause analysis, a step-by-step action roadmap, 30-day scenario war-gaming,
+              KPI targets and a leading-indicator watch-list — all reasoned from your live data.
+            </p>
+          </div>
+          <button onClick={onRun}
+            className="shrink-0 inline-flex items-center gap-2 h-11 px-5 rounded-xl text-[13px] font-bold transition-transform hover:scale-[1.03]"
+            style={{ background: DEEP_ACCENT, color: '#fff', boxShadow: '0 8px 24px rgba(139,92,246,0.35)' }}>
+            <Microscope size={16} /> Run Deep Research
+          </button>
+        </div>
+        {error && (
+          <p className="relative text-[12px] mt-4" style={{ color: 'var(--color-danger)' }}>
+            {error}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  // ── Report ─────────────────────────────────────────────────────────────────
+  return (
+    <div className="mb-5 animate-fadeInUp">
+      {/* header */}
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2.5">
+          <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl" style={{ background: `${DEEP_ACCENT}22`, color: DEEP_ACCENT }}>
+            <Microscope size={18} />
+          </span>
+          <div>
+            <p className="text-[15px] font-black text-[var(--text-primary)] leading-none">Deep Research</p>
+            <p className="text-[11px] text-[var(--text-muted)] mt-1">{deep.model ?? 'kimi-k2.6'} · {format(new Date(deep.generatedAt), 'MMM d, HH:mm')}</p>
+          </div>
+        </div>
+        <button onClick={onRun}
+          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-[12px] font-semibold transition-colors"
+          style={{ background: `${DEEP_ACCENT}1A`, color: DEEP_ACCENT, border: `1px solid ${DEEP_ACCENT}40` }}>
+          <RefreshCcw size={13} /> Re-run
+        </button>
+      </div>
+
+      {/* executive summary + situation */}
+      <div className="rounded-[16px] p-5 mb-4 relative overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.10), rgba(139,92,246,0.02))', border: `1px solid ${DEEP_ACCENT}40` }}>
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: DEEP_ACCENT }}>Executive Summary</p>
+        <p className="text-[14px] text-[var(--text-primary)] leading-relaxed font-medium">{deep.executiveSummary}</p>
+        {deep.situationAssessment && (
+          <p className="text-[12.5px] text-[var(--text-secondary)] leading-relaxed mt-3 pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            {deep.situationAssessment}
+          </p>
+        )}
+      </div>
+
+      {/* root causes + scenarios */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <Panel title="Root cause analysis" icon={<GitBranch size={14} />} accent={DEEP_ACCENT}>
+          <div className="flex flex-col gap-3">
+            {deep.rootCauses.length === 0 && <Empty text="No root causes identified." />}
+            {deep.rootCauses.map((rc, i) => (
+              <div key={i} className="rounded-[12px] p-3.5" style={{ background: 'var(--card-bg-hover)', border: '1px solid var(--border-subtle)' }}>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-[13px] font-bold text-[var(--text-primary)]">{rc.title}</span>
+                  {typeof rc.confidence === 'number' && <span className="text-[10px] font-bold" style={{ color: DEEP_ACCENT }}>{rc.confidence}% conf.</span>}
+                </div>
+                <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">{rc.analysis}</p>
+                {rc.evidence && <p className="text-[11px] mt-1.5" style={{ color: DEEP_ACCENT }}>Evidence: <span className="text-[var(--text-muted)]">{rc.evidence}</span></p>}
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="30-day scenarios" icon={<GitBranch size={14} />} accent="#06B6D4">
+          <div className="flex flex-col gap-3">
+            {deep.scenarios.length === 0 && <Empty text="No scenarios modelled." />}
+            {deep.scenarios.map((sc, i) => {
+              const c = tone(IMPACT_TONE, sc.impact)
+              return (
+                <div key={i} className="rounded-[12px] p-3.5" style={{ background: 'var(--card-bg-hover)', border: '1px solid var(--border-subtle)' }}>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="text-[13px] font-bold text-[var(--text-primary)]">{sc.name}</span>
+                    {typeof sc.probability === 'number' && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-14 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border-subtle)' }}>
+                          <div className="h-full rounded-full" style={{ width: `${sc.probability}%`, background: c }} />
+                        </div>
+                        <span className="text-[10px] text-[var(--text-muted)]">{sc.probability}%</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">{sc.narrative}</p>
+                  {sc.impact && <span className="inline-block mt-2"><Pill text={`${sc.impact} impact`} color={c} /></span>}
+                </div>
+              )
+            })}
+          </div>
+        </Panel>
+      </div>
+
+      {/* strategic plays */}
+      <Panel title="Strategic roadmap" icon={<Crosshair size={14} />} accent="#E07B39" className="mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {deep.strategicPlays.length === 0 && <Empty text="No plays proposed." />}
+          {deep.strategicPlays.map((p, i) => {
+            const pc = tone(PRIORITY_TONE, p.priority)
+            const ec = tone(EFFORT_TONE, p.effort)
+            return (
+              <div key={i} className="rounded-[14px] p-4" style={{ background: 'var(--card-bg-hover)', border: '1px solid var(--border-subtle)' }}>
+                <div className="flex items-start gap-3 mb-2">
+                  <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg text-[13px] font-black" style={{ background: `${DEEP_ACCENT}1A`, color: DEEP_ACCENT }}>{i + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-bold text-[var(--text-primary)] leading-snug">{p.title}</p>
+                    <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed mt-1">{p.rationale}</p>
+                  </div>
+                </div>
+                {p.steps.length > 0 && (
+                  <ol className="flex flex-col gap-1.5 mt-2 mb-2 pl-1">
+                    {p.steps.map((s, j) => (
+                      <li key={j} className="flex gap-2 text-[12px] text-[var(--text-secondary)] leading-relaxed">
+                        <span className="shrink-0 mt-1 w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                <div className="flex items-center gap-2 flex-wrap mt-2.5 pt-2.5" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                  {p.priority && <Pill text={`${p.priority} priority`} color={pc} />}
+                  {p.effort && <Pill text={`${p.effort} effort`} color={ec} />}
+                  {p.horizon && <span className="text-[10px] text-[var(--text-muted)]">⏱ {p.horizon}</span>}
+                </div>
+                {p.expectedOutcome && <p className="text-[11px] mt-2 text-[var(--text-muted)]">Outcome: <span className="text-[var(--text-secondary)]">{p.expectedOutcome}</span></p>}
+              </div>
+            )
+          })}
+        </div>
+      </Panel>
+
+      {/* KPI targets + watch list */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <Panel title="KPI targets" icon={<Target size={14} />} accent="#22C55E">
+          <div className="flex flex-col gap-2.5">
+            {deep.kpiTargets.length === 0 && <Empty text="No KPI targets set." />}
+            {deep.kpiTargets.map((k, i) => (
+              <div key={i} className="rounded-[10px] px-3.5 py-3" style={{ background: 'var(--card-bg-hover)', border: '1px solid var(--border-subtle)' }}>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-[12.5px] font-bold text-[var(--text-primary)]">{k.metric}</span>
+                  {k.timeframe && <span className="text-[10px] text-[var(--text-muted)]">{k.timeframe}</span>}
+                </div>
+                <div className="flex items-center gap-2 text-[12px]">
+                  <span className="text-[var(--text-muted)]">{k.current}</span>
+                  <ArrowRight size={13} className="text-[var(--text-muted)]" />
+                  <span className="font-bold" style={{ color: '#22C55E' }}>{k.target}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Watch-list" icon={<Eye size={14} />} accent="#F59E0B">
+          <div className="flex flex-col gap-2.5">
+            {deep.watchList.length === 0 && <Empty text="Nothing flagged to watch." />}
+            {deep.watchList.map((w, i) => (
+              <div key={i} className="flex gap-3 rounded-[10px] px-3.5 py-3" style={{ background: 'var(--card-bg-hover)', border: '1px solid var(--border-subtle)' }}>
+                <Flag size={15} className="shrink-0 mt-0.5" style={{ color: '#F59E0B' }} />
+                <div className="min-w-0">
+                  <p className="text-[12.5px] font-bold text-[var(--text-primary)]">{w.item}</p>
+                  <p className="text-[11.5px] text-[var(--text-secondary)] leading-relaxed">{w.why}</p>
+                  {w.trigger && <p className="text-[11px] mt-1" style={{ color: '#F59E0B' }}>Trigger: <span className="text-[var(--text-muted)]">{w.trigger}</span></p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      {/* bottom line */}
+      {deep.bottomLine && (
+        <div className="rounded-[16px] p-5 mb-2 flex items-start gap-3"
+          style={{ background: 'linear-gradient(135deg, rgba(224,123,57,0.12), rgba(139,92,246,0.06))', border: '1px solid var(--accent-border)' }}>
+          <span className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+            <Zap size={16} />
+          </span>
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--accent)] mb-1">The bottom line</p>
+            <p className="text-[14px] font-semibold text-[var(--text-primary)] leading-relaxed">{deep.bottomLine}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
