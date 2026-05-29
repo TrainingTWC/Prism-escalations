@@ -369,7 +369,7 @@ export async function requestDeepResearch(
 
   // 2. Poll the job via the function (Redis hot path, Postgres fallback).
   const POLL_MS = 3000
-  const TIMEOUT_MS = 6 * 60 * 1000 // 6 minutes — kimi-k2.6 dives can run long
+  const TIMEOUT_MS = 6 * 60 * 1000 // 6 minutes — generous ceiling for deep dives
   const started = Date.now()
 
   while (Date.now() - started < TIMEOUT_MS) {

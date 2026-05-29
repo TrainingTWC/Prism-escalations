@@ -17,7 +17,7 @@
 //   supabase functions deploy ai-insights
 //   supabase secrets set NVIDIA_API_KEY=nvapi-xxxxxxxx
 //   (optional) supabase secrets set NVIDIA_FAST_MODEL=meta/llama-3.3-70b-instruct
-//   (optional) supabase secrets set NVIDIA_DEEP_MODEL=moonshotai/kimi-k2.6
+//   (optional) supabase secrets set NVIDIA_DEEP_MODEL=google/gemma-4-31b-it
 //
 // JWT verification is left ON (default) so only authenticated app users can call it.
 // ---------------------------------------------------------------------------
@@ -29,7 +29,7 @@ import { Redis } from "https://esm.sh/@upstash/redis@1.34.3";
 
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 const FAST_MODEL = "meta/llama-3.3-70b-instruct";
-const DEEP_MODEL = "moonshotai/kimi-k2.6";
+const DEEP_MODEL = "google/gemma-4-31b-it";
 
 const ALLOWED_ORIGINS = [
   "https://escalations.prismintelligence.in",
