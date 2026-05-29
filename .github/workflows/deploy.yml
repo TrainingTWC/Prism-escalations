@@ -38,5 +38,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./out
           publish_branch: gh-pages
+          cname: escalations.prismintelligence.in
           # Prevent Jekyll processing — required for Next.js _next/ static assets
           enable_jekyll: false
