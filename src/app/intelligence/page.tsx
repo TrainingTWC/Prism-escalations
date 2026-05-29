@@ -501,9 +501,31 @@ function DeepResearchSection({
         <div className="absolute -left-12 -bottom-12 w-52 h-52 rounded-full blur-3xl pulse-breach" style={{ background: 'rgba(139,92,246,0.22)' }} />
         <div className="relative">
           <div className="flex items-center gap-3 mb-5">
-            <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl animate-spin-slow" style={{ background: `${DEEP_ACCENT}22`, color: DEEP_ACCENT }}>
-              <Microscope size={20} />
-            </span>
+            {(() => {
+              const ESTIMATE = 90 // seconds for a typical full dive
+              const C = 2 * Math.PI * 20 // ring circumference (r=20)
+              const pct = Math.min(0.97, elapsed / ESTIMATE) // hold just under full until done
+              return (
+                <span className="relative inline-flex items-center justify-center w-12 h-12 shrink-0">
+                  <svg className="absolute inset-0 -rotate-90" width="48" height="48" viewBox="0 0 48 48" aria-hidden>
+                    <defs>
+                      <linearGradient id="deepProgressRing" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#8B5CF6" />
+                        <stop offset="100%" stopColor="#E07B39" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-primary)" strokeWidth="3" opacity="0.45" />
+                    <circle
+                      cx="24" cy="24" r="20" fill="none"
+                      stroke="url(#deepProgressRing)" strokeWidth="3" strokeLinecap="round"
+                      strokeDasharray={C} strokeDashoffset={C * (1 - pct)}
+                      style={{ transition: 'stroke-dashoffset 1s linear' }}
+                    />
+                  </svg>
+                  <Microscope size={18} style={{ color: DEEP_ACCENT }} />
+                </span>
+              )
+            })()}
             <div>
               <p className="text-[15px] font-black text-[var(--text-primary)]">Deep Research in progress</p>
               <p className="text-[12px] text-[var(--text-muted)]">kimi-k2.6 is reasoning over your data · {elapsed}s elapsed</p>
