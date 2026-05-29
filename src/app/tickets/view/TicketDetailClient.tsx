@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useCallback, useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AppShell } from '@/components/layout/AppShell'
 import { GlassPanel } from '@/components/ui/GlassPanel'
@@ -28,8 +28,9 @@ type TicketUpdate = {
   closed_at?: string
 }
 
-export default function TicketDetailPage() {
-  const { id } = useParams()
+function TicketDetailInner() {
+  const searchParams = useSearchParams()
+  const id = searchParams.get('id')
   const { profile } = useAuthStore()
   const [ticket, setTicket] = useState<TicketWithRelations | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
@@ -40,17 +41,18 @@ export default function TicketDetailPage() {
   const [transitioning, setTransitioning] = useState(false)
 
   const fetchAll = useCallback(async () => {
+    if (!id) return
     const { data: tkt } = await supabase
       .from('tickets')
       .select(`*, store:stores(*), raised_by_profile:profiles!tickets_raised_by_fkey(*), assigned_to_profile:profiles!tickets_assigned_to_fkey(*)`)
-      .eq('id', id as string)
+      .eq('id', id)
       .single()
 
     const { data: cmts } = await supabase
-      .from('comments').select('*').eq('ticket_id', id as string).order('created_at', { ascending: true })
+      .from('comments').select('*').eq('ticket_id', id).order('created_at', { ascending: true })
 
     const { data: escs } = await supabase
-      .from('escalations').select('*').eq('ticket_id', id as string).order('triggered_at', { ascending: true })
+      .from('escalations').select('*').eq('ticket_id', id).order('triggered_at', { ascending: true })
 
     setTicket(tkt as unknown as TicketWithRelations)
     setComments(cmts || [])
@@ -59,8 +61,8 @@ export default function TicketDetailPage() {
   }, [id])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAll()
+    if (!id) return
     const channel = supabase
       .channel(`ticket-${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: `ticket_id=eq.${id}` }, fetchAll)
@@ -533,5 +535,21 @@ export default function TicketDetailPage() {
         </div>
       </div>
     </AppShell>
+  )
+}
+
+export default function TicketDetailPage() {
+  return (
+    <Suspense fallback={
+      <AppShell overline="Ticket" title="Loading…">
+        <div className="flex flex-col gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 120 }} />
+          ))}
+        </div>
+      </AppShell>
+    }>
+      <TicketDetailInner />
+    </Suspense>
   )
 }

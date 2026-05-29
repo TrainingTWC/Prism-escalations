@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Prism Escalations</title>
+  <script>
+    // SPA routing fallback for GitHub Pages project sites.
+    // When GitHub Pages returns 404 for a deep link (e.g. /Prism-escalations/tickets/abc),
+    // we save the intended path to sessionStorage, redirect to the app root,
+    // and the root layout restores the path via history.replaceState BEFORE React hydrates.
+    (function () {
+      var base = '/Prism-escalations';
+      var full = window.location.pathname;
+      // Strip the basePath prefix to get the SPA route
+      var route = full.startsWith(base) ? full.slice(base.length) : full;
+      if (!route || route === '/') return; // already at root, nothing to do
+      sessionStorage.setItem(
+        'spa_redirect',
+        route + window.location.search + window.location.hash
+      );
+      window.location.replace(base + '/');
+    })();
+  </script>
+</head>
+<body></body>
+</html>

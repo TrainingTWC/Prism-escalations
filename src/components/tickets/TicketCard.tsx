@@ -24,7 +24,7 @@ export function TicketCard({ ticket, index = 0 }: TicketCardProps) {
 
   return (
     <Link
-      href={`/tickets/${ticket.id}`}
+      href={`/tickets/view?id=${ticket.id}`}
       className="block animate-fadeInUp"
       style={{ animationDelay: `${index * 40}ms`, textDecoration: 'none' }}
     >

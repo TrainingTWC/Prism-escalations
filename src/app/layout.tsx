@@ -21,6 +21,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning className={jetbrainsMono.variable}>
+      <head>
+        {/* Restore deep-link path saved by 404.html SPA redirect before React hydrates */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var r=sessionStorage.getItem('spa_redirect');if(r){sessionStorage.removeItem('spa_redirect');history.replaceState(null,'',r);}})();` }} />
+      </head>
       <body suppressHydrationWarning className={`${jetbrainsMono.className} antialiased`}>
         <ThemeProvider>{children}</ThemeProvider>
       </body>

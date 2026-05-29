@@ -256,7 +256,7 @@ export default function DashboardPage() {
                 const tone = severityTone(ticket.severity)
                 const isBreached = ticket.sla_deadline && new Date(ticket.sla_deadline) < new Date()
                 return (
-                  <Link key={ticket.id} href={`/tickets/${ticket.id}`} className="premium-watch-row">
+                  <Link key={ticket.id} href={`/tickets/view?id=${ticket.id}`} className="premium-watch-row">
                     <span className="premium-score-bar" style={{ background: isBreached ? '#EF4444' : tone }} />
                     <div className="min-w-0">
                       <div className="premium-watch-title">{ticket.title}</div>
@@ -381,7 +381,7 @@ export default function DashboardPage() {
                 const tone = severityTone(ticket.severity)
                 const stateTone = statusTone(ticket.status)
                 return (
-                  <Link key={ticket.id} href={`/tickets/${ticket.id}`} className="premium-table-row">
+                  <Link key={ticket.id} href={`/tickets/view?id=${ticket.id}`} className="premium-table-row">
                     <span className="min-w-0">
                       <strong>{ticket.title}</strong>
                       <small>#{ticket.ticket_code} / {ticket.category}</small>
