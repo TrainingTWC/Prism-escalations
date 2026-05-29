@@ -24,6 +24,8 @@
 
 // deno-lint-ignore-file no-explicit-any
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 const FAST_MODEL = "meta/llama-3.3-70b-instruct";
 const DEEP_MODEL = "moonshotai/kimi-k2.6";
@@ -161,8 +163,8 @@ function buildFastUserPrompt(snapshot: unknown): string {
   ].join("\n");
 }
 
-function buildDeepUserPrompt(snapshot: unknown, baseReport: unknown): string {
-  return [
+function buildDeepUserPrompt(snapshot: unknown, baseReport: unknown, evidence: unknown): string {
+  const lines = [
     "Produce the deep research JSON. Pressure-test and extend the fast briefing using the full snapshot.",
     "",
     "METRICS SNAPSHOT (JSON):",
@@ -170,7 +172,30 @@ function buildDeepUserPrompt(snapshot: unknown, baseReport: unknown): string {
     "",
     "FAST FIRST-PASS BRIEFING (JSON) — your starting hypothesis to deepen, not repeat:",
     JSON.stringify(baseReport ?? {}, null, 2),
-  ].join("\n");
+  ];
+  if (Array.isArray(evidence) && evidence.length > 0) {
+    lines.push(
+      "",
+      "EVIDENCE SAMPLE — the most decision-relevant open tickets (breached, then critical, then oldest).",
+      "Use these concrete cases to ground root-cause reasoning and name specific patterns:",
+      JSON.stringify(evidence, null, 2),
+    );
+  }
+  return lines.join("\n");
+}
+
+// Extract the authenticated user's id (sub claim) from the verified JWT.
+function getUserId(req: Request): string | null {
+  const auth = req.headers.get("authorization") || "";
+  const token = auth.replace(/^Bearer\s+/i, "");
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload?.sub ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function extractJson(content: string): any {
@@ -216,18 +241,20 @@ Deno.serve(async (req: Request) => {
 
   let snapshot: unknown;
   let baseReport: unknown = null;
+  let evidence: unknown = null;
   let mode = "fast";
   try {
     const body = await req.json();
     snapshot = body?.snapshot ?? body;
     baseReport = body?.baseReport ?? null;
+    evidence = body?.evidence ?? null;
     if (body?.mode === "deep") mode = "deep";
     if (!snapshot || typeof snapshot !== "object") {
       throw new Error("missing snapshot");
     }
   } catch {
     return new Response(
-      JSON.stringify({ error: "Invalid request body — expected { snapshot: {...}, mode?, baseReport? }" }),
+      JSON.stringify({ error: "Invalid request body — expected { snapshot: {...}, mode?, baseReport?, evidence? }" }),
       { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
     );
   }
@@ -238,94 +265,101 @@ Deno.serve(async (req: Request) => {
     : (Deno.env.get("NVIDIA_FAST_MODEL") || FAST_MODEL);
   const systemPrompt = isDeep ? DEEP_SYSTEM_PROMPT : FAST_SYSTEM_PROMPT;
   const userPrompt = isDeep
-    ? buildDeepUserPrompt(snapshot, baseReport)
+    ? buildDeepUserPrompt(snapshot, baseReport, evidence)
     : buildFastUserPrompt(snapshot);
 
-  // ── DEEP MODE — STREAM kimi tokens to the client ─────────────────────────────
-  // kimi-k2.6 is slow (~80-120s). A buffered response would exceed the Edge
-  // Function compute budget (WORKER_RESOURCE_LIMIT), so we stream the assembled
-  // text content out as it arrives, keeping the worker active and memory flat.
+  // ── DEEP MODE — ASYNC JOB (kimi-k2.6) ────────────────────────────────────────
+  // kimi-k2.6 is slow (~1-2 min). Generating it inside the request would blow the
+  // Edge Function compute budget (WORKER_RESOURCE_LIMIT). Instead we:
+  //   1. create a `deep_research_jobs` row (status 'running'),
+  //   2. return the jobId immediately (202),
+  //   3. run the model in a background task via EdgeRuntime.waitUntil — while the
+  //      worker awaits the network fetch it uses ~0 CPU, so it stays within budget,
+  //   4. write the finished report back to the row; the client polls for it.
   if (isDeep) {
-    let nvidiaRes: Response;
-    try {
-      nvidiaRes = await fetch(NVIDIA_URL, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          Accept: "text/event-stream",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          max_tokens: 3200,
-          temperature: 0.5,
-          top_p: 0.9,
-          stream: true,
-        }),
-      });
-    } catch (err) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceKey) {
       return new Response(
-        JSON.stringify({ error: "Failed to reach model", detail: String(err).slice(0, 300) }),
-        { status: 502, headers: { ...cors, "Content-Type": "application/json" } },
+        JSON.stringify({ error: "Server not configured: Supabase service env missing" }),
+        { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
       );
     }
 
-    if (!nvidiaRes.ok || !nvidiaRes.body) {
-      const errText = await nvidiaRes.text().catch(() => "");
+    const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+    const userId = getUserId(req);
+
+    // 1. Create the job row so the client has something to poll immediately.
+    const { data: job, error: insErr } = await admin
+      .from("deep_research_jobs")
+      .insert({ requested_by: userId, status: "running", model, snapshot, evidence })
+      .select("id")
+      .single();
+
+    if (insErr || !job) {
       return new Response(
-        JSON.stringify({ error: "Upstream model error", status: nvidiaRes.status, detail: errText.slice(0, 500) }),
-        { status: 502, headers: { ...cors, "Content-Type": "application/json" } },
+        JSON.stringify({ error: "Failed to create job", detail: String(insErr?.message ?? "").slice(0, 300) }),
+        { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
       );
     }
 
-    // Transform the upstream SSE stream into a plain-text stream of content deltas.
-    const upstream = nvidiaRes.body;
-    const stream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        const reader = upstream.getReader();
-        const decoder = new TextDecoder();
-        const encoder = new TextEncoder();
-        let buffer = "";
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed.startsWith("data:")) continue;
-              const payload = trimmed.slice(5).trim();
-              if (payload === "[DONE]") continue;
-              try {
-                const json = JSON.parse(payload);
-                const delta = json?.choices?.[0]?.delta?.content;
-                if (delta) controller.enqueue(encoder.encode(delta));
-              } catch {
-                // ignore partial / non-JSON SSE keep-alive lines
-              }
-            }
-          }
-        } catch (err) {
-          controller.error(err);
-          return;
+    const jobId = job.id;
+
+    // 2. Run the model in the background and write the result back to the row.
+    const work = (async () => {
+      try {
+        const res = await fetch(NVIDIA_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            max_tokens: 3200,
+            temperature: 0.5,
+            top_p: 0.9,
+            stream: false,
+          }),
+        });
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          throw new Error(`Upstream ${res.status}: ${errText.slice(0, 300)}`);
         }
-        controller.close();
-      },
-    });
+        const data = await res.json();
+        const content: string = data?.choices?.[0]?.message?.content ?? "";
+        if (!content) throw new Error("Empty model response");
+        const report = extractJson(content);
+        report.generatedAt = new Date().toISOString();
+        report.model = model;
+        report.mode = "deep";
+        await admin
+          .from("deep_research_jobs")
+          .update({ status: "complete", report, completed_at: new Date().toISOString() })
+          .eq("id", jobId);
+      } catch (err) {
+        await admin
+          .from("deep_research_jobs")
+          .update({
+            status: "error",
+            error: String(err instanceof Error ? err.message : err).slice(0, 500),
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", jobId);
+      }
+    })();
 
-    return new Response(stream, {
-      headers: {
-        ...cors,
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache",
-        "X-Model": model,
-      },
+    // @ts-ignore — EdgeRuntime is provided by the Supabase Edge runtime.
+    EdgeRuntime.waitUntil(work);
+
+    return new Response(JSON.stringify({ jobId }), {
+      status: 202,
+      headers: { ...cors, "Content-Type": "application/json", "X-Model": model },
     });
   }
 

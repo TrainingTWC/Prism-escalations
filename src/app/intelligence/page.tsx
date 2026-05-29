@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AppShell } from '@/components/layout/AppShell'
-import { supabase } from '@/lib/supabase/client'
 import {
   AreaChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, ReferenceLine,
 } from 'recharts'
@@ -14,8 +13,8 @@ import {
   Microscope, Telescope, GitBranch, Crosshair, Eye, Flag, CheckCircle2,
 } from 'lucide-react'
 import {
-  buildAnalyticsSnapshot, requestAiInsights, requestDeepResearch,
-  type AnalyticsTicket, type AnalyticsSnapshot, type AiInsightReport, type AiDeepReport,
+  fetchAnalyticsSnapshot, fetchEvidenceSample, requestAiInsights, requestDeepResearch,
+  type AnalyticsSnapshot, type AiInsightReport, type AiDeepReport, type EvidenceTicket,
 } from '@/lib/intelligence/analytics-ai'
 
 // ─── tone helpers ──────────────────────────────────────────────────────────────
@@ -104,9 +103,9 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 export default function IntelligencePage() {
-  const [tickets, setTickets] = useState<AnalyticsTicket[]>([])
   const [loading, setLoading] = useState(true)
   const [snapshot, setSnapshot] = useState<AnalyticsSnapshot | null>(null)
+  const [evidence, setEvidence] = useState<EvidenceTicket[]>([])
   const [report, setReport] = useState<AiInsightReport | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
@@ -119,23 +118,20 @@ export default function IntelligencePage() {
 
   useEffect(() => {
     const load = async () => {
-      const PAGE = 1000
-      let offset = 0
-      const all: AnalyticsTicket[] = []
-      while (true) {
-        const { data } = await supabase
-          .from('tickets')
-          .select('id, category, severity, status, store_id, sla_deadline, resolved_at, closed_at, created_at, reopen_count, store:stores(store_name, store_code)')
-          .range(offset, offset + PAGE - 1)
-          .order('created_at', { ascending: false })
-        if (!data || data.length === 0) break
-        all.push(...(data as unknown as AnalyticsTicket[]))
-        if (data.length < PAGE) break
-        offset += PAGE
+      try {
+        // Snapshot + evidence are computed server-side (Postgres RPC) so the
+        // browser never downloads every ticket — this scales to thousands.
+        const [snap, ev] = await Promise.all([
+          fetchAnalyticsSnapshot(),
+          fetchEvidenceSample(12),
+        ])
+        setSnapshot(snap)
+        setEvidence(ev)
+      } catch (err) {
+        setAiError(err instanceof Error ? err.message : 'Failed to load analytics')
+      } finally {
+        setLoading(false)
       }
-      setTickets(all)
-      setSnapshot(buildAnalyticsSnapshot(all))
-      setLoading(false)
     }
     load()
   }, [])
@@ -161,7 +157,7 @@ export default function IntelligencePage() {
     setDeep(null)
     setDeepElapsed(0)
     try {
-      const result = await requestDeepResearch(snapshot, report)
+      const result = await requestDeepResearch(snapshot, report, evidence)
       setDeep(result)
     } catch (err) {
       setDeepError(err instanceof Error ? err.message : 'Deep research failed')

@@ -1,6 +1,6 @@
 'use client'
 
-import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 
 // ─── Ticket shape used for aggregation ─────────────────────────────────────────
 export interface AnalyticsTicket {
@@ -134,6 +134,37 @@ export interface AnalyticsSnapshot {
   trend: { last7: number; prev7: number; changePct: number | null }
   topStoresByVolume: { code: string; name: string; count: number }[]
   topStoresByBreach: { code: string; name: string; breached: number }[]
+}
+
+// ─── Evidence sample (RAG-lite retrieval, computed server-side) ────────────────
+export interface EvidenceTicket {
+  ticket_code: string
+  title: string
+  category: string
+  severity: string
+  status: string
+  store_code: string
+  created: string
+  age_days: number
+  breached: boolean
+  reopen_count: number
+}
+
+// ─── Server-side aggregation (Postgres RPC) ────────────────────────────────────
+// The snapshot is computed IN THE DATABASE so the browser never downloads every
+// ticket. This is O(1) network regardless of total ticket volume (scales to 1000s).
+export async function fetchAnalyticsSnapshot(): Promise<AnalyticsSnapshot> {
+  const { data, error } = await supabase.rpc('analytics_snapshot')
+  if (error) throw new Error(error.message || 'Failed to load analytics snapshot')
+  if (!data) throw new Error('Analytics snapshot returned no data')
+  return data as unknown as AnalyticsSnapshot
+}
+
+// Bounded set of the most decision-relevant open tickets (breached → critical → oldest).
+export async function fetchEvidenceSample(limit = 12): Promise<EvidenceTicket[]> {
+  const { data, error } = await supabase.rpc('evidence_sample', { sample_limit: limit })
+  if (error) throw new Error(error.message || 'Failed to load evidence sample')
+  return (Array.isArray(data) ? data : []) as unknown as EvidenceTicket[]
 }
 
 function hoursBetween(a: string, b: string) {
@@ -283,10 +314,11 @@ export async function requestAiInsights(snapshot: AnalyticsSnapshot): Promise<Ai
   }
 }
 
-// ─── Deep Research — kimi-k2.6 strategist dive (user-triggered, streamed) ──────
-// kimi is slow (~80-120s) which exceeds a buffered Edge Function's compute budget,
-// so deep mode STREAMS tokens from the function. We accumulate the streamed text
-// then parse the final JSON. onProgress reports characters received for live UI.
+// ─── Deep Research — kimi-k2.6 strategist dive (async job + polling) ───────────
+// kimi is slow (~1-2 min) which exceeds an Edge Function's in-request compute
+// budget. The function now creates a `deep_research_jobs` row, runs the model in
+// a background task, and writes the result back. The client kicks off the job
+// then polls that row (RLS-scoped to the caller) until it completes.
 function normalizeSteps(steps: unknown): string[] {
   if (Array.isArray(steps)) return steps.map((s) => String(s)).filter(Boolean)
   if (typeof steps === 'string' && steps.trim()) {
@@ -299,62 +331,7 @@ function normalizeSteps(steps: unknown): string[] {
   return []
 }
 
-function extractJsonLoose<T>(content: string): T {
-  const trimmed = content.trim()
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  const candidate = fenced ? fenced[1] : trimmed
-  try {
-    return JSON.parse(candidate) as T
-  } catch {
-    const start = candidate.indexOf('{')
-    const end = candidate.lastIndexOf('}')
-    if (start !== -1 && end !== -1 && end > start) {
-      return JSON.parse(candidate.slice(start, end + 1)) as T
-    }
-    throw new Error('Deep research returned unparseable output')
-  }
-}
-
-export async function requestDeepResearch(
-  snapshot: AnalyticsSnapshot,
-  baseReport: AiInsightReport | null,
-  onProgress?: (charsReceived: number) => void,
-): Promise<AiDeepReport> {
-  const { data: { session } } = await supabase.auth.getSession()
-  const token = session?.access_token
-
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-insights`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${token ?? SUPABASE_ANON_KEY}`,
-    },
-    body: JSON.stringify({ snapshot, mode: 'deep', baseReport }),
-  })
-
-  if (!res.ok || !res.body) {
-    let detail = `HTTP ${res.status}`
-    try {
-      const j = await res.json()
-      detail = j?.error || j?.message || detail
-    } catch { /* non-JSON body */ }
-    throw new Error(`Deep research failed: ${detail}`)
-  }
-
-  // Stream-accumulate the model text.
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let text = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    text += decoder.decode(value, { stream: true })
-    onProgress?.(text.length)
-  }
-  text += decoder.decode()
-
-  const report = extractJsonLoose<Partial<AiDeepReport>>(text)
+function normalizeDeepReport(report: Partial<AiDeepReport>): AiDeepReport {
   return {
     generatedAt: report.generatedAt ?? new Date().toISOString(),
     model: report.model,
@@ -370,4 +347,46 @@ export async function requestDeepResearch(
     watchList: Array.isArray(report.watchList) ? report.watchList : [],
     bottomLine: report.bottomLine ?? '',
   }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+export async function requestDeepResearch(
+  snapshot: AnalyticsSnapshot,
+  baseReport: AiInsightReport | null,
+  evidence: EvidenceTicket[] | null = null,
+): Promise<AiDeepReport> {
+  // 1. Kick off the async job — the function returns a jobId immediately (202).
+  const { data, error } = await supabase.functions.invoke('ai-insights', {
+    body: { snapshot, mode: 'deep', baseReport, evidence },
+  })
+  if (error) throw new Error(error.message || 'Failed to start deep research')
+  const jobId = (data as { jobId?: string })?.jobId
+  if (!jobId) throw new Error('Deep research did not return a job id')
+
+  // 2. Poll the job row until it completes (or errors / times out).
+  const POLL_MS = 2500
+  const TIMEOUT_MS = 4 * 60 * 1000 // 4 minutes
+  const started = Date.now()
+
+  while (Date.now() - started < TIMEOUT_MS) {
+    await sleep(POLL_MS)
+    const { data: job, error: pollErr } = await supabase
+      .from('deep_research_jobs')
+      .select('status, report, error')
+      .eq('id', jobId)
+      .single()
+
+    if (pollErr) continue // transient read error — keep polling
+    if (!job) continue
+
+    if (job.status === 'complete' && job.report) {
+      return normalizeDeepReport(job.report as Partial<AiDeepReport>)
+    }
+    if (job.status === 'error') {
+      throw new Error(`Deep research failed: ${job.error || 'unknown error'}`)
+    }
+  }
+
+  throw new Error('Deep research timed out. Please try again.')
 }
