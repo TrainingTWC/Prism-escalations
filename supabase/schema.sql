@@ -221,12 +221,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS tickets_intelligence_dedup
   WHERE intelligence_source = TRUE;
 
 -- Allow the webhook service-role to bypass RLS for ticket inserts
-CREATE POLICY IF NOT EXISTS "tickets_service_insert" ON public.tickets
-  FOR INSERT TO service_role WITH CHECK (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'tickets' AND policyname = 'tickets_service_insert'
+  ) THEN
+    CREATE POLICY "tickets_service_insert" ON public.tickets
+      FOR INSERT TO service_role WITH CHECK (true);
+  END IF;
 
-CREATE POLICY IF NOT EXISTS "tickets_service_update" ON public.tickets
-  FOR UPDATE TO service_role USING (true) WITH CHECK (true);
-  WITH CHECK ((SELECT auth.uid()) = uploaded_by);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'tickets' AND policyname = 'tickets_service_update'
+  ) THEN
+    CREATE POLICY "tickets_service_update" ON public.tickets
+      FOR UPDATE TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
 
 -- =====================================================================
 -- SEED DATA — Sample stores
