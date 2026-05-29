@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/auth.store'
 import { STATUS_FLOW, STATUS_LABELS, ESCALATION_LABELS } from '@/lib/ticket-utils'
 import type { TicketWithRelations, Comment, Escalation } from '@/lib/supabase/database.types'
 import { formatDistanceToNow, format } from 'date-fns'
+import ReactMarkdown from 'react-markdown'
 import {
   ArrowLeft, MapPin, User, Clock, Send, AlertTriangle,
   CheckCircle, ChevronRight, Sparkles, RefreshCw, ExternalLink,
@@ -169,9 +170,26 @@ function TicketDetailInner() {
               </div>
 
               {ticket.description && (
-                <p className="text-sm leading-relaxed text-[var(--text-secondary)] mb-4">
-                  {ticket.description}
-                </p>
+                <div className="ticket-description text-sm leading-relaxed text-[var(--text-secondary)] mb-4">
+                  <ReactMarkdown
+                    components={{
+                      h2: ({ children }) => <h2 className="text-[13px] font-bold text-[var(--text-primary)] mt-4 mb-1.5 first:mt-0">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-[12px] font-semibold text-[var(--text-secondary)] uppercase tracking-[0.06em] mt-3 mb-1 first:mt-0">{children}</h3>,
+                      strong: ({ children }) => <strong className="font-semibold text-[var(--text-primary)]">{children}</strong>,
+                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                      ul: ({ children }) => <ul className="flex flex-col gap-1 mb-2 pl-0">{children}</ul>,
+                      li: ({ children }) => <li className="flex gap-2 text-[12px]"><span className="text-[var(--accent)] shrink-0 mt-0.5">·</span><span>{children}</span></li>,
+                      table: ({ children }) => <table className="w-full text-[11px] mb-2 border-collapse">{children}</table>,
+                      th: ({ children }) => <th className="text-left font-semibold text-[var(--text-muted)] uppercase tracking-[0.06em] pb-1 pr-4">{children}</th>,
+                      td: ({ children }) => <td className="text-[var(--text-secondary)] py-0.5 pr-4 border-t border-[var(--border-subtle)]">{children}</td>,
+                      hr: () => <hr className="border-[var(--border-subtle)] my-3" />,
+                      em: ({ children }) => <em className="text-[var(--text-muted)] not-italic text-[11px]">{children}</em>,
+                      blockquote: ({ children }) => <blockquote className="pl-3 border-l-2 border-[var(--accent)] text-[var(--text-muted)] italic text-[11px] my-1">{children}</blockquote>,
+                    }}
+                  >
+                    {ticket.description}
+                  </ReactMarkdown>
+                </div>
               )}
 
               <div className="flex gap-5 flex-wrap text-[13px]">
