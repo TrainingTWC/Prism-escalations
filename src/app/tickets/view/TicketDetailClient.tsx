@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AppShell } from '@/components/layout/AppShell'
 import { GlassPanel } from '@/components/ui/GlassPanel'
@@ -16,7 +16,7 @@ import { formatDistanceToNow, format } from 'date-fns'
 import ReactMarkdown from 'react-markdown'
 import {
   ArrowLeft, MapPin, User, Clock, Send, AlertTriangle,
-  CheckCircle, ChevronRight, Sparkles, RefreshCw, ExternalLink,
+  CheckCircle, ChevronRight, Sparkles, RefreshCw, ExternalLink, Trash2,
 } from 'lucide-react'
 
 const STATUS_ORDER = ['open', 'acknowledged', 'accepted', 'in_progress', 'waiting', 'snag', 'resolved', 'verification', 'closed']
@@ -33,6 +33,7 @@ function TicketDetailInner() {
   const searchParams = useSearchParams()
   const id = searchParams.get('id')
   const { profile } = useAuthStore()
+  const router = useRouter()
   const [ticket, setTicket] = useState<TicketWithRelations | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [escalations, setEscalations] = useState<Escalation[]>([])
@@ -40,6 +41,8 @@ function TicketDetailInner() {
   const [comment, setComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const fetchAll = useCallback(async () => {
     if (!id) return
@@ -96,6 +99,13 @@ function TicketDetailInner() {
       new_status: newStatus,
     } as never)
     setTransitioning(false)
+  }
+
+  const deleteTicket = async () => {
+    if (!ticket) return
+    setDeleting(true)
+    await supabase.from('tickets').delete().eq('id', ticket.id)
+    router.push('/tickets')
   }
 
   const addComment = async () => {
@@ -547,6 +557,60 @@ function TicketDetailInner() {
                     </a>
                   )}
                 </div>
+              </GlassPanel>
+            )}
+            {/* Super-admin delete */}
+            {profile?.role === 'super_admin' && (
+              <GlassPanel padding="md">
+                {!confirmDelete ? (
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    className="w-full flex items-center justify-center gap-2 text-[12px] font-semibold rounded-[8px] py-2 transition-colors"
+                    style={{
+                      color: 'var(--color-danger)',
+                      background: 'rgba(239,68,68,0.07)',
+                      border: '1px solid rgba(239,68,68,0.20)',
+                    }}
+                  >
+                    <Trash2 size={13} />
+                    Delete Ticket
+                  </button>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[11px] text-[var(--color-danger)] text-center font-semibold">
+                      Permanently delete this ticket?
+                    </p>
+                    <p className="text-[10px] text-[var(--text-muted)] text-center">
+                      This cannot be undone. All comments and escalation history will be removed.
+                    </p>
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        onClick={() => setConfirmDelete(false)}
+                        disabled={deleting}
+                        className="flex-1 text-[11px] font-semibold rounded-[8px] py-1.5 transition-colors"
+                        style={{
+                          color: 'var(--text-secondary)',
+                          background: 'var(--bg-tertiary)',
+                          border: '1px solid var(--border-subtle)',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={deleteTicket}
+                        disabled={deleting}
+                        className="flex-1 text-[11px] font-bold rounded-[8px] py-1.5 transition-colors"
+                        style={{
+                          color: '#fff',
+                          background: 'var(--color-danger)',
+                          opacity: deleting ? 0.6 : 1,
+                        }}
+                      >
+                        {deleting ? 'Deleting…' : 'Yes, Delete'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </GlassPanel>
             )}
           </div>
