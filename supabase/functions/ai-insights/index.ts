@@ -20,7 +20,7 @@
 // deno-lint-ignore-file no-explicit-any
 
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const DEFAULT_MODEL = "moonshotai/kimi-k2.6";
+const DEFAULT_MODEL = "meta/llama-3.3-70b-instruct";
 
 const ALLOWED_ORIGINS = [
   "https://escalations.prismintelligence.in",
@@ -160,7 +160,7 @@ Deno.serve(async (req: Request) => {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: buildUserPrompt(snapshot) },
         ],
-        max_tokens: 4096,
+        max_tokens: 1500,
         temperature: 0.4,
         top_p: 0.9,
         stream: false,
