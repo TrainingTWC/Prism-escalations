@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Mail, Lock, AlertCircle } from 'lucide-react'
+import { PrismLogo } from '@/components/ui/PrismLogo'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -40,16 +41,8 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-[420px] animate-fadeInUp">
         {/* Brand */}
         <div className="text-center mb-10">
-          <div
-            className="w-14 h-14 rounded-2xl mx-auto mb-5 flex items-center justify-center text-[22px] font-extrabold"
-            style={{
-              background:
-                'linear-gradient(135deg, var(--color-ember-500) 0%, var(--color-ember-400) 100%)',
-              color: '#1A0E05',
-              boxShadow: '0 12px 36px rgba(224, 123, 57, 0.32)',
-            }}
-          >
-            P
+          <div className="mx-auto mb-5 flex items-center justify-center">
+            <PrismLogo size={56} />
           </div>
           <h1 className="text-[28px] font-extrabold tracking-tight text-[var(--text-primary)] leading-none mb-2">
             PRISM <span className="text-gradient-ember">ESCALATIONS</span>
