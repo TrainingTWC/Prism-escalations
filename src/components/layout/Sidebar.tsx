@@ -4,11 +4,12 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard, Ticket, Store, Users, BarChart3,
-  AlertTriangle, LogOut, ChevronLeft,
+  AlertTriangle, LogOut, ChevronLeft, Home,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import { useSidebar, SIDEBAR_WIDTH, SIDEBAR_WIDTH_COLLAPSED } from '@/lib/sidebar-context'
 import { cn } from '@/lib/cn'
+import { PrismLogo } from '@/components/ui/PrismLogo'
 
 interface NavItem {
   href: string
@@ -17,7 +18,8 @@ interface NavItem {
 }
 
 const PRIMARY_NAV: NavItem[] = [
-  { href: '/',            icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/',            icon: Home,            label: 'Home' },
+  { href: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/tickets',     icon: Ticket,          label: 'Tickets' },
   { href: '/escalations', icon: AlertTriangle,   label: 'Escalations' },
   { href: '/analytics',   icon: BarChart3,       label: 'Analytics' },
@@ -34,7 +36,7 @@ export function Sidebar() {
   const { collapsed, toggle, width } = useSidebar()
 
   const isActive = (href: string) =>
-    pathname === href || (href !== '/' && pathname.startsWith(href))
+    href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/')
 
   const renderNavItem = ({ href, icon: Icon, label }: NavItem) => {
     const active = isActive(href)
@@ -77,16 +79,7 @@ export function Sidebar() {
       {/* Brand */}
       <div className="h-14 px-4 flex items-center border-b border-[var(--sidebar-border)] shrink-0">
         <div className={cn('flex items-center gap-3 w-full', collapsed && 'justify-center')}>
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 font-extrabold text-[15px]"
-            style={{
-              background: 'linear-gradient(135deg, var(--color-ember-500) 0%, var(--color-ember-400) 100%)',
-              color: '#1A0E05',
-              boxShadow: '0 6px 18px rgba(224, 123, 57, 0.30)',
-            }}
-          >
-            P
-          </div>
+          <PrismLogo size={34} className="shrink-0" />
           {!collapsed && (
             <div className="min-w-0 leading-tight">
               <div className="text-[14px] font-extrabold tracking-tight text-[var(--text-primary)]">
