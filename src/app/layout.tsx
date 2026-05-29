@@ -16,6 +16,11 @@ export const metadata: Metadata = {
     'Unified Operational Issue Management System. Track tickets, SLAs, escalations and operational risk across your retail network.',
   keywords:
     'escalation management, SLA tracking, operational intelligence, retail operations, issue management',
+  icons: {
+    icon: '/prism-logo.png',
+    shortcut: '/prism-logo.png',
+    apple: '/prism-logo.png',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
