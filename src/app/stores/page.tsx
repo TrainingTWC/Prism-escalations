@@ -32,15 +32,48 @@ export default function StoresPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: storeData }, { data: empData }] = await Promise.all([
-        supabase.from('stores').select('*').order('store_name'),
-        supabase
+      // Fetch stores (≤218 rows, no pagination needed)
+      const { data: storeData } = await supabase.from('stores').select('*').order('store_name')
+      setStores((storeData as StoreRow[]) ?? [])
+
+      // Paginate employee_roster in 1000-row pages (Supabase PostgREST default cap)
+      const PAGE = 1000
+      const allEmps: EmpSlice[] = []
+      let offset = 0
+      while (true) {
+        const { data: page } = await supabase
           .from('employee_roster')
           .select('emp_id, store_code, department, is_active')
-          .eq('is_active', true),
-      ])
-      setStores((storeData as StoreRow[]) ?? [])
-      setEmployees((empData as EmpSlice[]) ?? [])
+          .eq('is_active', true)
+          .range(offset, offset + PAGE - 1)
+        if (!page || page.length === 0) break
+        allEmps.push(...(page as EmpSlice[]))
+        if (page.length < PAGE) break
+        offset += PAGE
+      }
+      setEmployees(allEmps)
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  // employees per store_code
+  const empByStore = useMemo(() => {
+    const m = new Map<string, number>()
+    employees.forEach((e) => {
+      if (e.store_code) m.set(e.store_code, (m.get(e.store_code) ?? 0) + 1)
+    })
+    return m
+  }, [employees])
+
+  // distinct departments + headcount
+  const departments = useMemo(() => {
+    const m = new Map<string, number>()
+    employees.forEach((e) => {
+      if (e.department) m.set(e.department, (m.get(e.department) ?? 0) + 1)
+    })
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1])
+  }, [employees])
       setLoading(false)
     }
     load()
