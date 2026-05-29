@@ -11,7 +11,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Prism Escalations — Operational Intelligence',
+  title: 'Prism Escalations',
   description:
     'Unified Operational Issue Management System. Track tickets, SLAs, escalations and operational risk across your retail network.',
   keywords:

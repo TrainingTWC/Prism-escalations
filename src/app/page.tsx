@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { AppShell } from '@/components/layout/AppShell'
-import { PrismLogo } from '@/components/ui/PrismLogo'
 import { supabase } from '@/lib/supabase/client'
 import {
   LayoutDashboard,
@@ -56,7 +55,7 @@ function ModuleCardComponent({ href, icon, title, description }: ModuleCard) {
   return (
     <Link
       href={href}
-      className="group flex flex-col gap-4 rounded-2xl p-6 transition-all duration-200"
+      className="group flex flex-col gap-5 rounded-2xl p-8 transition-all duration-200"
       style={{
         background: 'var(--card-bg)',
         border: '1px solid var(--card-border)',
@@ -73,7 +72,7 @@ function ModuleCardComponent({ href, icon, title, description }: ModuleCard) {
       }}
     >
       <div
-        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+        className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0"
         style={{
           background: 'var(--accent-dim)',
           color: 'var(--accent)',
@@ -82,22 +81,22 @@ function ModuleCardComponent({ href, icon, title, description }: ModuleCard) {
       >
         {icon}
       </div>
-      <div className="flex flex-col gap-2 flex-1">
+      <div className="flex flex-col gap-2.5 flex-1">
         <div
-          className="text-[13px] font-extrabold tracking-[0.12em]"
+          className="text-[15px] font-extrabold tracking-widest"
           style={{ color: 'var(--text-primary)' }}
         >
           {title}
         </div>
-        <p className="text-[12px] leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
+        <p className="text-[13px] leading-relaxed" style={{ color: 'var(--text-tertiary)' }}>
           {description}
         </p>
       </div>
       <div
-        className="flex items-center gap-1 text-[11px] font-bold tracking-widest transition-colors"
+        className="flex items-center gap-1 text-[12px] font-bold tracking-widest transition-colors"
         style={{ color: 'var(--accent)' }}
       >
-        OPEN <ArrowRight size={11} />
+        OPEN <ArrowRight size={12} />
       </div>
     </Link>
   )
@@ -187,28 +186,25 @@ export default function HomePage() {
 
   return (
     <AppShell title="Home" bare>
-      <div className="px-8 py-10 max-w-5xl">
+      <div className="px-8 py-10 max-w-6xl">
 
         {/* Hero */}
-        <div className="mb-12">
-          <div className="flex items-center gap-4 mb-8">
-            <PrismLogo size={52} />
-          </div>
+        <div className="mb-14">
           <p
-            className="text-[11px] font-bold uppercase tracking-[0.20em] mb-3"
+            className="text-[12px] font-bold uppercase tracking-[0.22em] mb-4"
             style={{ color: 'var(--accent)' }}
           >
             Operational Intelligence
           </p>
           <h1
-            className="text-[42px] font-extrabold tracking-tight leading-none mb-4"
+            className="text-[56px] md:text-[72px] lg:text-[84px] font-extrabold tracking-tight leading-[0.95] mb-6"
             style={{ color: 'var(--text-primary)' }}
           >
             PRISM{' '}
             <span className="text-gradient-ember">ESCALATIONS</span>
           </h1>
           <p
-            className="text-[14px] leading-relaxed max-w-xl"
+            className="text-[16px] leading-relaxed max-w-2xl"
             style={{ color: 'var(--text-secondary)' }}
           >
             Unified operational issue management and risk mitigation across your network.
@@ -217,7 +213,7 @@ export default function HomePage() {
         </div>
 
         {/* Primary modules */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-14">
           {PRIMARY_MODULES.map((mod) => (
             <ModuleCardComponent key={mod.href} {...mod} />
           ))}
