@@ -74,28 +74,6 @@ export default function StoresPage() {
     })
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1])
   }, [employees])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  // employees per store_code
-  const empByStore = useMemo(() => {
-    const m = new Map<string, number>()
-    employees.forEach((e) => {
-      if (e.store_code) m.set(e.store_code, (m.get(e.store_code) ?? 0) + 1)
-    })
-    return m
-  }, [employees])
-
-  // distinct departments + headcount
-  const departments = useMemo(() => {
-    const m = new Map<string, number>()
-    employees.forEach((e) => {
-      if (e.department) m.set(e.department, (m.get(e.department) ?? 0) + 1)
-    })
-    return Array.from(m.entries()).sort((a, b) => b[1] - a[1])
-  }, [employees])
 
   // region pills
   const regions = useMemo(
