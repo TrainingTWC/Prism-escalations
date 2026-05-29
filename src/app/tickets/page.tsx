@@ -90,7 +90,13 @@ export default function TicketsPage() {
     if (selected.size === 0) return
     setDeleting(true)
     const ids = Array.from(selected)
-    await supabase.from('tickets').delete().in('id', ids)
+    const { error } = await supabase.from('tickets').delete().in('id', ids)
+    if (error) {
+      console.error('Delete failed:', error.message)
+      alert(`Delete failed: ${error.message}`)
+      setDeleting(false)
+      return
+    }
     setTickets((prev) => prev.filter((t) => !selected.has(t.id)))
     exitSelectMode()
     setDeleting(false)
