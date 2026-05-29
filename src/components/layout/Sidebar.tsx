@@ -77,27 +77,27 @@ export function Sidebar() {
     >
       {/* Brand */}
       <div className="h-14 px-4 flex items-center border-b border-[var(--sidebar-border)] shrink-0">
-        <div className={cn('flex items-center gap-3 w-full', collapsed && 'justify-center')}>
+        <Link
+          href="/"
+          className={cn('flex items-center gap-3 w-full group', collapsed && 'justify-center')}
+        >
           <PrismLogo size={34} className="shrink-0" />
           {!collapsed && (
-            <div className="min-w-0 leading-tight">
-              <div className="text-[14px] font-extrabold tracking-tight text-[var(--text-primary)]">
-                PRISM
-              </div>
-              <div className="text-[9px] font-bold uppercase tracking-[0.20em] text-[var(--accent)]">
-                Escalations
-              </div>
-            </div>
+            <span className="text-[12px] font-bold uppercase tracking-[0.22em] text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] transition-colors truncate">
+              Prism Escalations
+            </span>
           )}
-        </div>
+        </Link>
       </div>
 
       {/* Product heading + search */}
       {!collapsed && (
         <div className="px-4 pt-5 pb-4 flex flex-col gap-4 shrink-0">
-          <h2 className="text-[20px] font-extrabold tracking-tight text-[var(--text-primary)] leading-none">
-            Prism Escalations
-          </h2>
+          <Link href="/" className="inline-block">
+            <h2 className="text-[20px] font-extrabold tracking-tight text-[var(--text-primary)] leading-none hover:text-[var(--accent)] transition-colors">
+              Prism Escalations
+            </h2>
+          </Link>
           <div className="relative">
             <Search
               size={14}
