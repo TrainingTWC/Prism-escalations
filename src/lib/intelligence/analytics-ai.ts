@@ -365,8 +365,8 @@ export async function requestDeepResearch(
   if (!jobId) throw new Error('Deep research did not return a job id')
 
   // 2. Poll the job row until it completes (or errors / times out).
-  const POLL_MS = 2500
-  const TIMEOUT_MS = 4 * 60 * 1000 // 4 minutes
+  const POLL_MS = 3000
+  const TIMEOUT_MS = 6 * 60 * 1000 // 6 minutes — kimi-k2.6 dives can run long
   const started = Date.now()
 
   while (Date.now() - started < TIMEOUT_MS) {
