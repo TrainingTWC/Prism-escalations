@@ -25,6 +25,7 @@
 // deno-lint-ignore-file no-explicit-any
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Redis } from "https://esm.sh/@upstash/redis@1.34.3";
 
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 const FAST_MODEL = "meta/llama-3.3-70b-instruct";
@@ -198,6 +199,52 @@ function getUserId(req: Request): string | null {
   }
 }
 
+// ─── Upstash Redis (hot path: job state + snapshot/fast-briefing cache) ─────────
+// The browser is a static site and cannot hold Redis creds, so Redis is reached
+// only from this function. If the env vars are absent we degrade gracefully:
+// every cache becomes a miss and the job state falls back to Postgres.
+const REDIS_TTL = {
+  snapshot: 60, // seconds — dashboard aggregate
+  fast: 3600, // seconds — fast briefing keyed by snapshot content
+  job: 3600, // seconds — deep-research job lifetime
+};
+const jobKey = (id: string) => `deep:job:${id}`;
+const SNAPSHOT_KEY = "analytics:snapshot";
+
+function getRedis(): Redis | null {
+  const url = Deno.env.get("UPSTASH_REDIS_REST_URL");
+  const token = Deno.env.get("UPSTASH_REDIS_REST_TOKEN");
+  if (!url || !token) return null;
+  try {
+    return new Redis({ url, token });
+  } catch {
+    return null;
+  }
+}
+
+function serviceClient() {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false } });
+}
+
+// Stable content hash of a snapshot (excludes the volatile generatedAt field),
+// so identical underlying metrics reuse a cached fast briefing.
+async function snapshotHash(snapshot: any): Promise<string> {
+  const core = JSON.stringify({
+    totals: snapshot?.totals,
+    rates: snapshot?.rates,
+    byStatus: snapshot?.byStatus,
+    bySeverity: snapshot?.bySeverity,
+    byCategory: snapshot?.byCategory,
+    agingOpen: snapshot?.agingOpen,
+    trend: snapshot?.trend,
+  });
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(core));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+}
+
 function extractJson(content: string): any {
   const trimmed = content.trim();
   // Strip ```json ... ``` fences if the model added them.
@@ -231,6 +278,89 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  // ── Parse the request body & resolve the mode ───────────────────────────────
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(
+      JSON.stringify({ error: "Invalid JSON body" }),
+      { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+    );
+  }
+
+  const mode: string = body?.mode ?? "fast";
+  const redis = getRedis();
+
+  // ── SNAPSHOT MODE — cached dashboard aggregate ───────────────────────────────
+  // Browser asks the function for the snapshot; we serve it from Redis (60s TTL)
+  // and fall back to the Postgres analytics_snapshot() RPC on a miss.
+  if (mode === "snapshot") {
+    if (redis) {
+      const cached = await redis.get(SNAPSHOT_KEY).catch(() => null);
+      if (cached) {
+        return new Response(JSON.stringify({ snapshot: cached, cached: true }), {
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+    }
+    const admin = serviceClient();
+    if (!admin) {
+      return new Response(
+        JSON.stringify({ error: "Server not configured: Supabase service env missing" }),
+        { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+    const { data, error } = await admin.rpc("analytics_snapshot");
+    if (error || !data) {
+      return new Response(
+        JSON.stringify({ error: "Failed to compute snapshot", detail: String(error?.message ?? "").slice(0, 300) }),
+        { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+    if (redis) await redis.set(SNAPSHOT_KEY, data, { ex: REDIS_TTL.snapshot }).catch(() => {});
+    return new Response(JSON.stringify({ snapshot: data, cached: false }), {
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+  }
+
+  // ── JOB STATUS MODE — poll a deep-research job ───────────────────────────────
+  // Reads the hot job state from Redis, falling back to the Postgres audit row.
+  if (mode === "job") {
+    const jobId: string | undefined = body?.jobId;
+    if (!jobId) {
+      return new Response(
+        JSON.stringify({ error: "Missing jobId" }),
+        { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+    if (redis) {
+      const job = await redis.get(jobKey(jobId)).catch(() => null);
+      if (job) {
+        return new Response(JSON.stringify(job), {
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+    }
+    const admin = serviceClient();
+    if (admin) {
+      const { data } = await admin
+        .from("deep_research_jobs")
+        .select("status, report, error")
+        .eq("id", jobId)
+        .single();
+      if (data) {
+        return new Response(JSON.stringify(data), {
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+    }
+    return new Response(JSON.stringify({ status: "running" }), {
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+  }
+
+  // ── fast & deep both need the model key and a snapshot ───────────────────────
   const apiKey = Deno.env.get("NVIDIA_API_KEY");
   if (!apiKey) {
     return new Response(
@@ -239,20 +369,10 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  let snapshot: unknown;
-  let baseReport: unknown = null;
-  let evidence: unknown = null;
-  let mode = "fast";
-  try {
-    const body = await req.json();
-    snapshot = body?.snapshot ?? body;
-    baseReport = body?.baseReport ?? null;
-    evidence = body?.evidence ?? null;
-    if (body?.mode === "deep") mode = "deep";
-    if (!snapshot || typeof snapshot !== "object") {
-      throw new Error("missing snapshot");
-    }
-  } catch {
+  const snapshot: unknown = body?.snapshot ?? body;
+  const baseReport: unknown = body?.baseReport ?? null;
+  const evidence: unknown = body?.evidence ?? null;
+  if (!snapshot || typeof snapshot !== "object") {
     return new Response(
       JSON.stringify({ error: "Invalid request body — expected { snapshot: {...}, mode?, baseReport?, evidence? }" }),
       { status: 400, headers: { ...cors, "Content-Type": "application/json" } },
@@ -277,35 +397,36 @@ Deno.serve(async (req: Request) => {
   //      worker awaits the network fetch it uses ~0 CPU, so it stays within budget,
   //   4. write the finished report back to the row; the client polls for it.
   if (isDeep) {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceKey) {
+    const admin = serviceClient();
+    if (!admin) {
       return new Response(
         JSON.stringify({ error: "Server not configured: Supabase service env missing" }),
         { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
       );
     }
 
-    const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
     const userId = getUserId(req);
+    // Shared id so Redis (hot path) and the Postgres audit row reference the same job.
+    const jobId = crypto.randomUUID();
 
-    // 1. Create the job row so the client has something to poll immediately.
-    const { data: job, error: insErr } = await admin
+    // 1a. Hot state in Redis so the client can poll immediately.
+    if (redis) {
+      await redis.set(jobKey(jobId), { status: "running", model }, { ex: REDIS_TTL.job }).catch(() => {});
+    }
+    // 1b. Durable audit row in Postgres.
+    const { error: insErr } = await admin
       .from("deep_research_jobs")
-      .insert({ requested_by: userId, status: "running", model, snapshot, evidence })
-      .select("id")
-      .single();
+      .insert({ id: jobId, requested_by: userId, status: "running", model, snapshot, evidence });
 
-    if (insErr || !job) {
+    if (insErr && !redis) {
+      // No hot store and no audit row — nothing can track this job.
       return new Response(
         JSON.stringify({ error: "Failed to create job", detail: String(insErr?.message ?? "").slice(0, 300) }),
         { status: 500, headers: { ...cors, "Content-Type": "application/json" } },
       );
     }
 
-    const jobId = job.id;
-
-    // 2. Run the model in the background and write the result back to the row.
+    // 2. Run the model in the background and write the result to Redis + Postgres.
     const work = (async () => {
       try {
         const res = await fetch(NVIDIA_URL, {
@@ -338,16 +459,23 @@ Deno.serve(async (req: Request) => {
         report.generatedAt = new Date().toISOString();
         report.model = model;
         report.mode = "deep";
+        if (redis) {
+          await redis.set(jobKey(jobId), { status: "complete", report }, { ex: REDIS_TTL.job }).catch(() => {});
+        }
         await admin
           .from("deep_research_jobs")
           .update({ status: "complete", report, completed_at: new Date().toISOString() })
           .eq("id", jobId);
       } catch (err) {
+        const message = String(err instanceof Error ? err.message : err).slice(0, 500);
+        if (redis) {
+          await redis.set(jobKey(jobId), { status: "error", error: message }, { ex: REDIS_TTL.job }).catch(() => {});
+        }
         await admin
           .from("deep_research_jobs")
           .update({
             status: "error",
-            error: String(err instanceof Error ? err.message : err).slice(0, 500),
+            error: message,
             completed_at: new Date().toISOString(),
           })
           .eq("id", jobId);
@@ -363,7 +491,17 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // ── FAST MODE — buffered JSON briefing ───────────────────────────────────────
+  // ── FAST MODE — buffered JSON briefing (Redis-cached by snapshot content) ────
+  const fastCacheKey = redis ? `fast:${await snapshotHash(snapshot)}` : null;
+  if (redis && fastCacheKey) {
+    const cached = await redis.get(fastCacheKey).catch(() => null);
+    if (cached) {
+      return new Response(JSON.stringify({ report: cached, cached: true }), {
+        headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+  }
+
   try {
     const nvidiaRes = await fetch(NVIDIA_URL, {
       method: "POST",
@@ -406,6 +544,10 @@ Deno.serve(async (req: Request) => {
     report.generatedAt = new Date().toISOString();
     report.model = model;
     report.mode = mode;
+
+    if (redis && fastCacheKey) {
+      await redis.set(fastCacheKey, report, { ex: REDIS_TTL.fast }).catch(() => {});
+    }
 
     return new Response(JSON.stringify({ report }), {
       headers: { ...cors, "Content-Type": "application/json" },

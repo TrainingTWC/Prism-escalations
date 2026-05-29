@@ -150,14 +150,17 @@ export interface EvidenceTicket {
   reopen_count: number
 }
 
-// ─── Server-side aggregation (Postgres RPC) ────────────────────────────────────
-// The snapshot is computed IN THE DATABASE so the browser never downloads every
-// ticket. This is O(1) network regardless of total ticket volume (scales to 1000s).
+// ─── Server-side aggregation (Postgres RPC, Redis-cached via the Edge Function) ─
+// The snapshot is computed IN THE DATABASE and cached in Redis (60s) by the
+// function, so the browser never downloads tickets and repeat loads are instant.
 export async function fetchAnalyticsSnapshot(): Promise<AnalyticsSnapshot> {
-  const { data, error } = await supabase.rpc('analytics_snapshot')
+  const { data, error } = await supabase.functions.invoke('ai-insights', {
+    body: { mode: 'snapshot' },
+  })
   if (error) throw new Error(error.message || 'Failed to load analytics snapshot')
-  if (!data) throw new Error('Analytics snapshot returned no data')
-  return data as unknown as AnalyticsSnapshot
+  const snap = (data as { snapshot?: AnalyticsSnapshot })?.snapshot
+  if (!snap) throw new Error('Analytics snapshot returned no data')
+  return snap
 }
 
 // Bounded set of the most decision-relevant open tickets (breached → critical → oldest).
@@ -364,27 +367,24 @@ export async function requestDeepResearch(
   const jobId = (data as { jobId?: string })?.jobId
   if (!jobId) throw new Error('Deep research did not return a job id')
 
-  // 2. Poll the job row until it completes (or errors / times out).
+  // 2. Poll the job via the function (Redis hot path, Postgres fallback).
   const POLL_MS = 3000
   const TIMEOUT_MS = 6 * 60 * 1000 // 6 minutes — kimi-k2.6 dives can run long
   const started = Date.now()
 
   while (Date.now() - started < TIMEOUT_MS) {
     await sleep(POLL_MS)
-    const { data: job, error: pollErr } = await supabase
-      .from('deep_research_jobs')
-      .select('status, report, error')
-      .eq('id', jobId)
-      .single()
+    const { data: job, error: pollErr } = await supabase.functions.invoke('ai-insights', {
+      body: { mode: 'job', jobId },
+    })
 
-    if (pollErr) continue // transient read error — keep polling
-    if (!job) continue
-
-    if (job.status === 'complete' && job.report) {
-      return normalizeDeepReport(job.report as Partial<AiDeepReport>)
+    if (pollErr) continue // transient error — keep polling
+    const status = (job as { status?: string })?.status
+    if (status === 'complete' && (job as { report?: unknown }).report) {
+      return normalizeDeepReport((job as { report: Partial<AiDeepReport> }).report)
     }
-    if (job.status === 'error') {
-      throw new Error(`Deep research failed: ${job.error || 'unknown error'}`)
+    if (status === 'error') {
+      throw new Error(`Deep research failed: ${(job as { error?: string }).error || 'unknown error'}`)
     }
   }
 
