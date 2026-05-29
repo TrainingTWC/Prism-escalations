@@ -241,6 +241,95 @@ Deno.serve(async (req: Request) => {
     ? buildDeepUserPrompt(snapshot, baseReport)
     : buildFastUserPrompt(snapshot);
 
+  // ── DEEP MODE — STREAM kimi tokens to the client ─────────────────────────────
+  // kimi-k2.6 is slow (~80-120s). A buffered response would exceed the Edge
+  // Function compute budget (WORKER_RESOURCE_LIMIT), so we stream the assembled
+  // text content out as it arrives, keeping the worker active and memory flat.
+  if (isDeep) {
+    let nvidiaRes: Response;
+    try {
+      nvidiaRes = await fetch(NVIDIA_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: "text/event-stream",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          max_tokens: 3200,
+          temperature: 0.5,
+          top_p: 0.9,
+          stream: true,
+        }),
+      });
+    } catch (err) {
+      return new Response(
+        JSON.stringify({ error: "Failed to reach model", detail: String(err).slice(0, 300) }),
+        { status: 502, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!nvidiaRes.ok || !nvidiaRes.body) {
+      const errText = await nvidiaRes.text().catch(() => "");
+      return new Response(
+        JSON.stringify({ error: "Upstream model error", status: nvidiaRes.status, detail: errText.slice(0, 500) }),
+        { status: 502, headers: { ...cors, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Transform the upstream SSE stream into a plain-text stream of content deltas.
+    const upstream = nvidiaRes.body;
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const reader = upstream.getReader();
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
+        let buffer = "";
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith("data:")) continue;
+              const payload = trimmed.slice(5).trim();
+              if (payload === "[DONE]") continue;
+              try {
+                const json = JSON.parse(payload);
+                const delta = json?.choices?.[0]?.delta?.content;
+                if (delta) controller.enqueue(encoder.encode(delta));
+              } catch {
+                // ignore partial / non-JSON SSE keep-alive lines
+              }
+            }
+          }
+        } catch (err) {
+          controller.error(err);
+          return;
+        }
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        ...cors,
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "X-Model": model,
+      },
+    });
+  }
+
+  // ── FAST MODE — buffered JSON briefing ───────────────────────────────────────
   try {
     const nvidiaRes = await fetch(NVIDIA_URL, {
       method: "POST",
@@ -255,8 +344,8 @@ Deno.serve(async (req: Request) => {
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        max_tokens: isDeep ? 3200 : 1500,
-        temperature: isDeep ? 0.5 : 0.4,
+        max_tokens: 1500,
+        temperature: 0.4,
         top_p: 0.9,
         stream: false,
       }),

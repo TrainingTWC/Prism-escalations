@@ -1,6 +1,6 @@
 'use client'
 
-import { supabase } from '@/lib/supabase/client'
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/client'
 
 // ─── Ticket shape used for aggregation ─────────────────────────────────────────
 export interface AnalyticsTicket {
@@ -283,22 +283,78 @@ export async function requestAiInsights(snapshot: AnalyticsSnapshot): Promise<Ai
   }
 }
 
-// ─── Deep Research — kimi-k2.6 strategist dive (user-triggered, ~1-2 min) ──────
+// ─── Deep Research — kimi-k2.6 strategist dive (user-triggered, streamed) ──────
+// kimi is slow (~80-120s) which exceeds a buffered Edge Function's compute budget,
+// so deep mode STREAMS tokens from the function. We accumulate the streamed text
+// then parse the final JSON. onProgress reports characters received for live UI.
+function normalizeSteps(steps: unknown): string[] {
+  if (Array.isArray(steps)) return steps.map((s) => String(s)).filter(Boolean)
+  if (typeof steps === 'string' && steps.trim()) {
+    // kimi occasionally returns steps as one string — split on sentence/semicolon boundaries.
+    return steps
+      .split(/(?<=[.;])\s+(?=[A-Z])/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+function extractJsonLoose<T>(content: string): T {
+  const trimmed = content.trim()
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const candidate = fenced ? fenced[1] : trimmed
+  try {
+    return JSON.parse(candidate) as T
+  } catch {
+    const start = candidate.indexOf('{')
+    const end = candidate.lastIndexOf('}')
+    if (start !== -1 && end !== -1 && end > start) {
+      return JSON.parse(candidate.slice(start, end + 1)) as T
+    }
+    throw new Error('Deep research returned unparseable output')
+  }
+}
+
 export async function requestDeepResearch(
   snapshot: AnalyticsSnapshot,
   baseReport: AiInsightReport | null,
+  onProgress?: (charsReceived: number) => void,
 ): Promise<AiDeepReport> {
-  const { data, error } = await supabase.functions.invoke('ai-insights', {
-    body: { snapshot, mode: 'deep', baseReport },
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-insights`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token ?? SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({ snapshot, mode: 'deep', baseReport }),
   })
 
-  if (error) {
-    throw new Error(error.message || 'Deep research request failed')
+  if (!res.ok || !res.body) {
+    let detail = `HTTP ${res.status}`
+    try {
+      const j = await res.json()
+      detail = j?.error || j?.message || detail
+    } catch { /* non-JSON body */ }
+    throw new Error(`Deep research failed: ${detail}`)
   }
-  const report = (data as { report?: AiDeepReport })?.report
-  if (!report) {
-    throw new Error('Deep research returned no report')
+
+  // Stream-accumulate the model text.
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let text = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    text += decoder.decode(value, { stream: true })
+    onProgress?.(text.length)
   }
+  text += decoder.decode()
+
+  const report = extractJsonLoose<Partial<AiDeepReport>>(text)
   return {
     generatedAt: report.generatedAt ?? new Date().toISOString(),
     model: report.model,
@@ -307,7 +363,7 @@ export async function requestDeepResearch(
     situationAssessment: report.situationAssessment ?? '',
     rootCauses: Array.isArray(report.rootCauses) ? report.rootCauses : [],
     strategicPlays: Array.isArray(report.strategicPlays)
-      ? report.strategicPlays.map((p) => ({ ...p, steps: Array.isArray(p.steps) ? p.steps : [] }))
+      ? report.strategicPlays.map((p) => ({ ...p, steps: normalizeSteps(p.steps) }))
       : [],
     scenarios: Array.isArray(report.scenarios) ? report.scenarios : [],
     kpiTargets: Array.isArray(report.kpiTargets) ? report.kpiTargets : [],
