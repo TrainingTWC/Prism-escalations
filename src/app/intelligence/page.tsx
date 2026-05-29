@@ -45,6 +45,16 @@ function healthTone(score: number) {
   return '#EF4444'
 }
 
+// ─── numeric parsing for KPI progress visualisation ────────────────────────────
+// Best-effort: pulls the first number out of a free-text value ("0%", "23",
+// "<48 hours", "N/A"). Returns null when there's nothing numeric to show.
+function parseNum(s?: string): number | null {
+  if (!s) return null
+  const m = s.replace(/,/g, '').match(/-?\d+(\.\d+)?/)
+  return m ? parseFloat(m[0]) : null
+}
+
+
 // ─── reusable panel ──────────────────────────────────────────────────────────
 function Panel({ title, icon, children, className = '', accent }: {
   title: string; icon?: React.ReactNode; children: React.ReactNode; className?: string; accent?: string
@@ -607,6 +617,35 @@ function DeepResearchSection({
         </button>
       </div>
 
+      {/* at-a-glance overview strip */}
+      {(() => {
+        const confs = deep.rootCauses.map((r) => r.confidence).filter((c): c is number => typeof c === 'number')
+        const avgConf = confs.length ? Math.round(confs.reduce((a, b) => a + b, 0) / confs.length) : null
+        const topScenario = [...deep.scenarios].sort((a, b) => (b.probability ?? 0) - (a.probability ?? 0))[0]
+        const urgentPlays = deep.strategicPlays.filter((p) => p.priority === 'urgent').length
+        const tiles: { label: string; value: string; sub?: string; color: string; icon: React.ReactNode }[] = [
+          { label: 'Root causes', value: String(deep.rootCauses.length), sub: avgConf != null ? `${avgConf}% avg conf.` : undefined, color: DEEP_ACCENT, icon: <GitBranch size={14} /> },
+          { label: 'Scenarios', value: String(deep.scenarios.length), sub: topScenario ? `top ${topScenario.probability ?? 0}%` : undefined, color: '#06B6D4', icon: <Telescope size={14} /> },
+          { label: 'Strategic plays', value: String(deep.strategicPlays.length), sub: urgentPlays ? `${urgentPlays} urgent` : undefined, color: '#E07B39', icon: <Crosshair size={14} /> },
+          { label: 'KPI targets', value: String(deep.kpiTargets.length), color: '#22C55E', icon: <Target size={14} /> },
+          { label: 'Watch-list', value: String(deep.watchList.length), color: '#F59E0B', icon: <Eye size={14} /> },
+        ]
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+            {tiles.map((t, i) => (
+              <div key={i} className="rounded-[14px] p-3.5 flex flex-col gap-1" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-primary)' }}>
+                <div className="flex items-center gap-1.5" style={{ color: t.color }}>
+                  {t.icon}
+                  <span className="text-[10px] font-bold uppercase tracking-[0.1em]">{t.label}</span>
+                </div>
+                <span className="text-[24px] font-black leading-none text-[var(--text-primary)]">{t.value}</span>
+                {t.sub && <span className="text-[10.5px] text-[var(--text-muted)]">{t.sub}</span>}
+              </div>
+            ))}
+          </div>
+        )
+      })()}
+
       {/* executive summary + situation */}
       <div className="rounded-[16px] p-5 mb-4 relative overflow-hidden"
         style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.10), rgba(139,92,246,0.02))', border: `1px solid ${DEEP_ACCENT}40` }}>
@@ -630,6 +669,11 @@ function DeepResearchSection({
                   <span className="text-[13px] font-bold text-[var(--text-primary)]">{rc.title}</span>
                   {typeof rc.confidence === 'number' && <span className="text-[10px] font-bold" style={{ color: DEEP_ACCENT }}>{rc.confidence}% conf.</span>}
                 </div>
+                {typeof rc.confidence === 'number' && (
+                  <div className="h-1.5 w-full rounded-full overflow-hidden mb-2" style={{ background: 'var(--border-subtle)' }}>
+                    <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, rc.confidence))}%`, background: DEEP_ACCENT }} />
+                  </div>
+                )}
                 <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed">{rc.analysis}</p>
                 {rc.evidence && <p className="text-[11px] mt-1.5" style={{ color: DEEP_ACCENT }}>Evidence: <span className="text-[var(--text-muted)]">{rc.evidence}</span></p>}
               </div>
@@ -640,6 +684,36 @@ function DeepResearchSection({
         <Panel title="30-day scenarios" icon={<GitBranch size={14} />} accent="#06B6D4">
           <div className="flex flex-col gap-3">
             {deep.scenarios.length === 0 && <Empty text="No scenarios modelled." />}
+            {deep.scenarios.length > 0 && (
+              <div className="rounded-[12px] p-3.5 mb-1" style={{ background: 'var(--card-bg-hover)', border: '1px solid var(--border-subtle)' }}>
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-2.5">Likelihood of each future</p>
+                <div className="flex flex-col gap-2.5">
+                  {[...deep.scenarios]
+                    .sort((a, b) => (b.probability ?? 0) - (a.probability ?? 0))
+                    .map((sc, i) => {
+                      const c = tone(IMPACT_TONE, sc.impact)
+                      const pct = Math.max(0, Math.min(100, sc.probability ?? 0))
+                      return (
+                        <div key={i} className="flex items-center gap-2.5">
+                          <span className="w-24 shrink-0 text-[11px] font-semibold text-[var(--text-secondary)] truncate" title={sc.name}>{sc.name}</span>
+                          <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--border-subtle)' }}>
+                            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: c }} />
+                          </div>
+                          <span className="w-9 shrink-0 text-right text-[11px] font-bold" style={{ color: c }}>{pct}%</span>
+                        </div>
+                      )
+                    })}
+                </div>
+                <div className="flex items-center gap-3 flex-wrap mt-3 pt-2.5" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                  {(['low', 'medium', 'high', 'severe'] as const).map((k) => (
+                    <span key={k} className="inline-flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
+                      <span className="w-2.5 h-2.5 rounded-sm" style={{ background: IMPACT_TONE[k] }} />
+                      {k} impact
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {deep.scenarios.map((sc, i) => {
               const c = tone(IMPACT_TONE, sc.impact)
               return (
@@ -707,19 +781,43 @@ function DeepResearchSection({
         <Panel title="KPI targets" icon={<Target size={14} />} accent="#22C55E">
           <div className="flex flex-col gap-2.5">
             {deep.kpiTargets.length === 0 && <Empty text="No KPI targets set." />}
-            {deep.kpiTargets.map((k, i) => (
-              <div key={i} className="rounded-[10px] px-3.5 py-3" style={{ background: 'var(--card-bg-hover)', border: '1px solid var(--border-subtle)' }}>
-                <div className="flex items-center justify-between gap-2 mb-1.5">
-                  <span className="text-[12.5px] font-bold text-[var(--text-primary)]">{k.metric}</span>
-                  {k.timeframe && <span className="text-[10px] text-[var(--text-muted)]">{k.timeframe}</span>}
+            {deep.kpiTargets.map((k, i) => {
+              const cur = parseNum(k.current)
+              const tgt = parseNum(k.target)
+              // Plot current & target on a shared 0→max scale so the gap is visible.
+              const scaleMax = cur != null && tgt != null ? Math.max(cur, tgt, 1) : 0
+              const hasBar = cur != null && tgt != null && scaleMax > 0 && cur >= 0 && tgt >= 0
+              const curPct = hasBar ? (cur! / scaleMax) * 100 : 0
+              const tgtPct = hasBar ? (tgt! / scaleMax) * 100 : 0
+              const lo = Math.min(curPct, tgtPct)
+              const hi = Math.max(curPct, tgtPct)
+              const c = '#22C55E'
+              return (
+                <div key={i} className="rounded-[10px] px-3.5 py-3" style={{ background: 'var(--card-bg-hover)', border: '1px solid var(--border-subtle)' }}>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="text-[12.5px] font-bold text-[var(--text-primary)]">{k.metric}</span>
+                    {k.timeframe && <span className="text-[10px] text-[var(--text-muted)]">{k.timeframe}</span>}
+                  </div>
+                  <div className="flex items-center gap-2 text-[12px] mb-1.5">
+                    <span className="text-[var(--text-muted)]">{k.current}</span>
+                    <ArrowRight size={13} className="text-[var(--text-muted)]" />
+                    <span className="font-bold" style={{ color: c }}>{k.target}</span>
+                  </div>
+                  {hasBar && (
+                    <div className="relative h-2 w-full rounded-full" style={{ background: 'var(--border-subtle)' }}>
+                      {/* gap between where we are and where we want to be */}
+                      <div className="absolute inset-y-0 rounded-full" style={{ left: `${lo}%`, width: `${hi - lo}%`, background: `${c}40` }} />
+                      {/* current marker */}
+                      <span className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full border-2"
+                        style={{ left: `${curPct}%`, background: 'var(--card-bg)', borderColor: 'var(--text-muted)' }} title={`Current: ${k.current}`} />
+                      {/* target marker */}
+                      <span className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full"
+                        style={{ left: `${tgtPct}%`, background: c, boxShadow: `0 0 0 2px ${c}40` }} title={`Target: ${k.target}`} />
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 text-[12px]">
-                  <span className="text-[var(--text-muted)]">{k.current}</span>
-                  <ArrowRight size={13} className="text-[var(--text-muted)]" />
-                  <span className="font-bold" style={{ color: '#22C55E' }}>{k.target}</span>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </Panel>
 
