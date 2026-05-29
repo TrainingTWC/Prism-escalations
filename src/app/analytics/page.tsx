@@ -8,7 +8,8 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import { format, subDays, eachDayOfInterval, startOfDay } from 'date-fns'
-import { Clock, ShieldAlert, RefreshCcw, TrendingUp } from 'lucide-react'
+import { Clock, ShieldAlert, RefreshCcw, TrendingUp, Brain, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
 
 // ─── colour palette ──────────────────────────────────────────────────────────
 const CAT_COLORS: Record<string, string> = {
@@ -227,6 +228,13 @@ export default function AnalyticsPage() {
       overline="Insights"
       title="Analytics"
       subtitle={`Computed from ${stats?.total ?? 0} tickets`}
+      actions={
+        <Link href="/intelligence"
+          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg text-[13px] font-semibold transition-colors"
+          style={{ background: 'var(--accent)', color: '#1A0E05' }}>
+          <Brain size={15} /> AI Intelligence <ArrowRight size={13} />
+        </Link>
+      }
     >
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-4 mb-6 sm:grid-cols-4">
