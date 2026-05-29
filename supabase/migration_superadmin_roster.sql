@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.employee_roster (
   email         TEXT,
   department    TEXT,
   designation   TEXT,
-  store_code    TEXT REFERENCES public.stores(store_code) ON UPDATE CASCADE,
+  store_code    TEXT,
   region        TEXT,
   is_active     BOOLEAN NOT NULL DEFAULT true,
   convex_id     TEXT,

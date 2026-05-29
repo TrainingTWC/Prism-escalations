@@ -253,12 +253,55 @@ export type Database = {
           file_type?: string | null
         }
       }
+
+      employee_roster: {
+        Row: {
+          id: string
+          emp_id: string
+          name: string
+          email: string | null
+          department: string | null
+          designation: string | null
+          store_code: string | null
+          region: string | null
+          is_active: boolean
+          convex_id: string | null
+          last_synced_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          emp_id: string
+          name: string
+          email?: string | null
+          department?: string | null
+          designation?: string | null
+          store_code?: string | null
+          region?: string | null
+          is_active?: boolean
+          convex_id?: string | null
+          last_synced_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          name?: string
+          email?: string | null
+          department?: string | null
+          designation?: string | null
+          store_code?: string | null
+          region?: string | null
+          is_active?: boolean
+          convex_id?: string | null
+          last_synced_at?: string | null
+        }
+      }
     }
   }
 }
 
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type Store = Database['public']['Tables']['stores']['Row']
+export type EmployeeRoster = Database['public']['Tables']['employee_roster']['Row']
 export type Ticket = Database['public']['Tables']['tickets']['Row']
 export type Escalation = Database['public']['Tables']['escalations']['Row']
 export type Comment = Database['public']['Tables']['comments']['Row']
