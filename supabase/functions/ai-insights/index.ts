@@ -155,6 +155,44 @@ Rules:
 - Order arrays by importance.
 - Be concrete and numeric throughout. Do NOT wrap the JSON in markdown fences.`;
 
+// ─── Deep Part-1: analytical sections (runs in parallel with Part-2) ───────────
+// Covers the narrative/diagnostic sections only — shorter output = faster finish.
+const DEEP_PART1_SYSTEM = `Operational strategist for "Prism Escalations". Given an anonymised metrics snapshot and a fast first-pass briefing, produce ONLY these analytical sections as a single valid JSON object. No markdown fences. No text outside the JSON.
+
+{
+  "executiveSummary": "3-4 sentences. The strategic story of what is really happening. Lead with the sharpest insight, cite exact numbers.",
+  "situationAssessment": "3-4 sentences deep diagnostic connecting multiple metrics into one coherent picture.",
+  "rootCauses": [
+    { "title": "string", "analysis": "causal chain <=180 chars", "evidence": "exact figures", "confidence": 0-100 }
+  ],
+  "bottomLine": "one decisive sentence — the single most important thing to do right now."
+}
+
+Rules: 2-3 rootCauses ordered by impact. Every claim must cite real numbers from the data. No invented data.`;
+
+// ─── Deep Part-2: action sections (runs in parallel with Part-1) ────────────────
+// Covers the actionable/forward-looking sections only.
+const DEEP_PART2_SYSTEM = `Operational strategist for "Prism Escalations". Given an anonymised metrics snapshot and a fast first-pass briefing, produce ONLY these action sections as a single valid JSON object. No markdown fences. No text outside the JSON.
+
+{
+  "strategicPlays": [
+    { "title": "string", "rationale": "why this, why now — <=160 chars", "steps": ["concrete action 1", "action 2", "action 3"], "expectedOutcome": "quantified target", "effort": "low|medium|high", "priority": "low|medium|high|urgent", "horizon": "e.g. This week" }
+  ],
+  "scenarios": [
+    { "name": "Best case", "probability": 0-100, "narrative": "30-day narrative <=180 chars", "impact": "low|medium|high|severe" },
+    { "name": "Most likely", "probability": 0-100, "narrative": "30-day narrative <=180 chars", "impact": "low|medium|high|severe" },
+    { "name": "Worst case", "probability": 0-100, "narrative": "30-day narrative <=180 chars", "impact": "low|medium|high|severe" }
+  ],
+  "kpiTargets": [
+    { "metric": "string", "current": "string", "target": "string", "timeframe": "string" }
+  ],
+  "watchList": [
+    { "item": "string", "why": "string", "trigger": "threshold that should trigger action" }
+  ]
+}
+
+Rules: 2-3 strategicPlays (most impactful first). Exactly 3 scenarios in the order shown. 2-3 kpiTargets. 2-3 watchList items. Cite real numbers. No invented data.`;
+
 function buildFastUserPrompt(snapshot: unknown): string {
   return [
     "Analyse the following operational snapshot and return the fast briefing JSON.",
@@ -431,14 +469,17 @@ Deno.serve(async (req: Request) => {
     }
 
     // 2. Run the model in the background and write the result to Redis + Postgres.
+    // We split the 8-field schema into two parallel calls (Part-1: analysis sections,
+    // Part-2: action sections). Total wall time ≈ max(t1, t2) instead of t1+t2,
+    // cutting expected latency roughly in half. Each call targets ~800 output tokens.
     const work = (async () => {
       try {
-        // Hard cap: abort if the model hasn't responded within 90 s.
+        // Shared abort — if either call hangs past 90 s the whole job fails cleanly.
         const abortCtrl = new AbortController();
         const abortTimer = setTimeout(() => abortCtrl.abort(), 90_000);
-        let res: Response;
-        try {
-          res = await fetch(NVIDIA_URL, {
+
+        const callPart = async (sysPrompt: string): Promise<Record<string, unknown>> => {
+          const res = await fetch(NVIDIA_URL, {
             method: "POST",
             signal: abortCtrl.signal,
             headers: {
@@ -449,26 +490,37 @@ Deno.serve(async (req: Request) => {
             body: JSON.stringify({
               model,
               messages: [
-                { role: "system", content: systemPrompt },
+                { role: "system", content: sysPrompt },
                 { role: "user", content: userPrompt },
               ],
-              max_tokens: 1600,
+              max_tokens: 900,
               temperature: 0.3,
               top_p: 0.9,
               stream: false,
             }),
           });
+          if (!res.ok) {
+            const errText = await res.text().catch(() => "");
+            throw new Error(`Upstream ${res.status}: ${errText.slice(0, 300)}`);
+          }
+          const data = await res.json();
+          const content: string = data?.choices?.[0]?.message?.content ?? "";
+          if (!content) throw new Error("Empty model response");
+          return extractJson(content) as Record<string, unknown>;
+        };
+
+        let part1: Record<string, unknown>;
+        let part2: Record<string, unknown>;
+        try {
+          [part1, part2] = await Promise.all([
+            callPart(DEEP_PART1_SYSTEM),
+            callPart(DEEP_PART2_SYSTEM),
+          ]);
         } finally {
           clearTimeout(abortTimer);
         }
-        if (!res.ok) {
-          const errText = await res.text().catch(() => "");
-          throw new Error(`Upstream ${res.status}: ${errText.slice(0, 300)}`);
-        }
-        const data = await res.json();
-        const content: string = data?.choices?.[0]?.message?.content ?? "";
-        if (!content) throw new Error("Empty model response");
-        const report = extractJson(content);
+
+        const report: Record<string, unknown> = { ...part1, ...part2 };
         report.generatedAt = new Date().toISOString();
         report.model = model;
         report.mode = "deep";
