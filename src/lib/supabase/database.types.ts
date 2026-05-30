@@ -48,6 +48,9 @@ export type Database = {
           region: string
           tier: string
           manager_id: string | null
+          am_name: string | null
+          trainer_name: string | null
+          hr_name: string | null
           created_at: string
         }
         Insert: {
@@ -58,6 +61,9 @@ export type Database = {
           region: string
           tier?: string
           manager_id?: string | null
+          am_name?: string | null
+          trainer_name?: string | null
+          hr_name?: string | null
           created_at?: string
         }
         Update: {
@@ -67,6 +73,9 @@ export type Database = {
           region?: string
           tier?: string
           manager_id?: string | null
+          am_name?: string | null
+          trainer_name?: string | null
+          hr_name?: string | null
         }
       }
       tickets: {

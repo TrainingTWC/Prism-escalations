@@ -27,18 +27,17 @@ interface Filters {
   region: string
   am: string
   trainer: string
+  hr: string
   search: string
 }
 
-type RosterSlice = { name: string; designation: string | null; store_code: string | null }
-const EMPTY_FILTERS: Filters = { status: '', severity: '', category: '', store: '', region: '', am: '', trainer: '', search: '' }
+const EMPTY_FILTERS: Filters = { status: '', severity: '', category: '', store: '', region: '', am: '', trainer: '', hr: '', search: '' }
 
 export default function TicketsPage() {
   const { profile } = useAuthStore()
   const isSuperAdmin = profile?.role === 'super_admin'
 
   const [tickets, setTickets] = useState<TicketWithRelations[]>([])
-  const [roster, setRoster] = useState<RosterSlice[]>([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
 
@@ -72,49 +71,6 @@ export default function TicketsPage() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchTickets])
 
-  // Employee roster — used to resolve each store's Area Manager / Trainer
-  useEffect(() => {
-    const loadRoster = async () => {
-      const PAGE = 1000
-      const all: RosterSlice[] = []
-      let offset = 0
-      while (true) {
-        const { data: page } = await supabase
-          .from('employee_roster')
-          .select('name, designation, store_code, is_active')
-          .eq('is_active', true)
-          .range(offset, offset + PAGE - 1)
-        if (!page || page.length === 0) break
-        all.push(...(page as RosterSlice[]))
-        if (page.length < PAGE) break
-        offset += PAGE
-      }
-      setRoster(all)
-    }
-    loadRoster()
-  }, [])
-
-  // store_code → AM / Trainer name
-  const amByStoreCode = useMemo(() => {
-    const m = new Map<string, string>()
-    roster.forEach((r) => {
-      if (r.store_code && r.designation && /area\s*manager|^am$/i.test(r.designation) && !m.has(r.store_code)) {
-        m.set(r.store_code, r.name)
-      }
-    })
-    return m
-  }, [roster])
-
-  const trainerByStoreCode = useMemo(() => {
-    const m = new Map<string, string>()
-    roster.forEach((r) => {
-      if (r.store_code && r.designation && /trainer/i.test(r.designation) && !m.has(r.store_code)) {
-        m.set(r.store_code, r.name)
-      }
-    })
-    return m
-  }, [roster])
-
   // Filter option lists, derived from the loaded tickets
   const storeOptions = useMemo(() => {
     const m = new Map<string, string>()
@@ -127,38 +83,30 @@ export default function TicketsPage() {
     [tickets],
   )
 
-  const amOptions = useMemo(() => {
-    const s = new Set<string>()
-    tickets.forEach((t) => {
-      const code = t.store?.store_code
-      if (code && amByStoreCode.has(code)) s.add(amByStoreCode.get(code)!)
-    })
-    return Array.from(s).sort()
-  }, [tickets, amByStoreCode])
+  const amOptions = useMemo(
+    () => Array.from(new Set(tickets.map((t) => t.store?.am_name).filter(Boolean) as string[])).sort(),
+    [tickets],
+  )
 
-  const trainerOptions = useMemo(() => {
-    const s = new Set<string>()
-    tickets.forEach((t) => {
-      const code = t.store?.store_code
-      if (code && trainerByStoreCode.has(code)) s.add(trainerByStoreCode.get(code)!)
-    })
-    return Array.from(s).sort()
-  }, [tickets, trainerByStoreCode])
+  const trainerOptions = useMemo(
+    () => Array.from(new Set(tickets.map((t) => t.store?.trainer_name).filter(Boolean) as string[])).sort(),
+    [tickets],
+  )
 
-  // Client-side filtering for store / region / AM / trainer
+  const hrOptions = useMemo(
+    () => Array.from(new Set(tickets.map((t) => t.store?.hr_name).filter(Boolean) as string[])).sort(),
+    [tickets],
+  )
+
+  // Client-side filtering for store / region / AM / trainer / HR
   const visibleTickets = useMemo(() => tickets.filter((t) => {
     if (filters.store && t.store?.id !== filters.store) return false
     if (filters.region && t.store?.region !== filters.region) return false
-    if (filters.am) {
-      const code = t.store?.store_code
-      if (!code || amByStoreCode.get(code) !== filters.am) return false
-    }
-    if (filters.trainer) {
-      const code = t.store?.store_code
-      if (!code || trainerByStoreCode.get(code) !== filters.trainer) return false
-    }
+    if (filters.am && t.store?.am_name !== filters.am) return false
+    if (filters.trainer && t.store?.trainer_name !== filters.trainer) return false
+    if (filters.hr && t.store?.hr_name !== filters.hr) return false
     return true
-  }), [tickets, filters.store, filters.region, filters.am, filters.trainer, amByStoreCode, trainerByStoreCode])
+  }), [tickets, filters.store, filters.region, filters.am, filters.trainer, filters.hr])
 
 
   const exitSelectMode = () => {
@@ -199,7 +147,7 @@ export default function TicketsPage() {
     setDeleting(false)
   }
 
-  const hasFilters   = Boolean(filters.status || filters.severity || filters.category || filters.store || filters.region || filters.am || filters.trainer || filters.search)
+  const hasFilters   = Boolean(filters.status || filters.severity || filters.category || filters.store || filters.region || filters.am || filters.trainer || filters.hr || filters.search)
   const clearFilters = () => setFilters(EMPTY_FILTERS)
 
   const selectClass = 'prism-input'
@@ -286,6 +234,14 @@ export default function TicketsPage() {
             <select value={filters.trainer} onChange={(e) => setFilters((f) => ({ ...f, trainer: e.target.value }))} className={selectClass} style={{ ...selectStyle, minWidth: 150 }}>
               <option value="">All Trainers</option>
               {trainerOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </FilterItem>
+        )}
+        {hrOptions.length > 0 && (
+          <FilterItem label="HR">
+            <select value={filters.hr} onChange={(e) => setFilters((f) => ({ ...f, hr: e.target.value }))} className={selectClass} style={{ ...selectStyle, minWidth: 150 }}>
+              <option value="">All HRs</option>
+              {hrOptions.map((h) => <option key={h} value={h}>{h}</option>)}
             </select>
           </FilterItem>
         )}
