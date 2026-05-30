@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import {
   fetchAnalyticsSnapshot, fetchEvidenceSample, requestAiInsights, requestDeepResearch,
+  getSavedDeepJobId, pollDeepJob,
   type AnalyticsSnapshot, type AiInsightReport, type AiDeepReport, type EvidenceTicket,
 } from '@/lib/intelligence/analytics-ai'
 
@@ -183,6 +184,21 @@ export default function IntelligencePage() {
     const id = setInterval(() => setDeepElapsed((s) => s + 1), 1000)
     return () => clearInterval(id)
   }, [deepLoading])
+
+  // On mount: resume any deep research job that was started before navigation away.
+  useEffect(() => {
+    const savedJobId = getSavedDeepJobId()
+    if (!savedJobId) return
+    setDeepLoading(true)
+    setDeepError(null)
+    setDeep(null)
+    setDeepElapsed(0)
+    pollDeepJob(savedJobId)
+      .then((result) => setDeep(result))
+      .catch((err) => setDeepError(err instanceof Error ? err.message : 'Deep research failed'))
+      .finally(() => setDeepLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Auto-run once the snapshot is ready and there is data.
   useEffect(() => {

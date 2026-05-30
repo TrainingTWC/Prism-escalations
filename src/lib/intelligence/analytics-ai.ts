@@ -317,15 +317,27 @@ export async function requestAiInsights(snapshot: AnalyticsSnapshot): Promise<Ai
   }
 }
 
-// ─── Deep Research — kimi-k2.6 strategist dive (async job + polling) ───────────
-// kimi is slow (~1-2 min) which exceeds an Edge Function's in-request compute
-// budget. The function now creates a `deep_research_jobs` row, runs the model in
-// a background task, and writes the result back. The client kicks off the job
-// then polls that row (RLS-scoped to the caller) until it completes.
+// ─── Deep Research — async job + polling with cross-navigation persistence ──────
+// The Edge Function creates a `deep_research_jobs` row, runs the model in a
+// background task, and writes the result back. The client kicks off the job then
+// polls until completion. The jobId is stored in localStorage so polling survives
+// page navigation — if the user leaves and returns, polling resumes automatically.
+
+const DEEP_JOB_KEY = 'prism:deepJobId'
+
+function saveDeepJobId(id: string) {
+  try { localStorage.setItem(DEEP_JOB_KEY, id) } catch { /* SSR / private-mode */ }
+}
+function clearDeepJobId() {
+  try { localStorage.removeItem(DEEP_JOB_KEY) } catch { /* SSR */ }
+}
+export function getSavedDeepJobId(): string | null {
+  try { return localStorage.getItem(DEEP_JOB_KEY) } catch { return null }
+}
+
 function normalizeSteps(steps: unknown): string[] {
   if (Array.isArray(steps)) return steps.map((s) => String(s)).filter(Boolean)
   if (typeof steps === 'string' && steps.trim()) {
-    // kimi occasionally returns steps as one string — split on sentence/semicolon boundaries.
     return steps
       .split(/(?<=[.;])\s+(?=[A-Z])/)
       .map((s) => s.trim())
@@ -354,6 +366,34 @@ function normalizeDeepReport(report: Partial<AiDeepReport>): AiDeepReport {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+// Poll an existing jobId until it completes, errors, or the 10-minute ceiling hits.
+export async function pollDeepJob(jobId: string): Promise<AiDeepReport> {
+  const POLL_MS = 3000
+  const TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes — generous ceiling
+  const started = Date.now()
+
+  while (Date.now() - started < TIMEOUT_MS) {
+    await sleep(POLL_MS)
+    const { data: job, error: pollErr } = await supabase.functions.invoke('ai-insights', {
+      body: { mode: 'job', jobId },
+    })
+
+    if (pollErr) continue // transient error — keep polling
+    const status = (job as { status?: string })?.status
+    if (status === 'complete' && (job as { report?: unknown }).report) {
+      clearDeepJobId()
+      return normalizeDeepReport((job as { report: Partial<AiDeepReport> }).report)
+    }
+    if (status === 'error') {
+      clearDeepJobId()
+      throw new Error(`Deep research failed: ${(job as { error?: string }).error || 'unknown error'}`)
+    }
+  }
+
+  clearDeepJobId()
+  throw new Error('Deep research timed out. Please try again.')
+}
+
 export async function requestDeepResearch(
   snapshot: AnalyticsSnapshot,
   baseReport: AiInsightReport | null,
@@ -367,26 +407,9 @@ export async function requestDeepResearch(
   const jobId = (data as { jobId?: string })?.jobId
   if (!jobId) throw new Error('Deep research did not return a job id')
 
-  // 2. Poll the job via the function (Redis hot path, Postgres fallback).
-  const POLL_MS = 3000
-  const TIMEOUT_MS = 6 * 60 * 1000 // 6 minutes — generous ceiling for deep dives
-  const started = Date.now()
+  // Persist jobId so navigation away and back can resume polling.
+  saveDeepJobId(jobId)
 
-  while (Date.now() - started < TIMEOUT_MS) {
-    await sleep(POLL_MS)
-    const { data: job, error: pollErr } = await supabase.functions.invoke('ai-insights', {
-      body: { mode: 'job', jobId },
-    })
-
-    if (pollErr) continue // transient error — keep polling
-    const status = (job as { status?: string })?.status
-    if (status === 'complete' && (job as { report?: unknown }).report) {
-      return normalizeDeepReport((job as { report: Partial<AiDeepReport> }).report)
-    }
-    if (status === 'error') {
-      throw new Error(`Deep research failed: ${(job as { error?: string }).error || 'unknown error'}`)
-    }
-  }
-
-  throw new Error('Deep research timed out. Please try again.')
+  // 2. Poll until done.
+  return pollDeepJob(jobId)
 }

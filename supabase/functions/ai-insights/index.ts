@@ -469,58 +469,37 @@ Deno.serve(async (req: Request) => {
     }
 
     // 2. Run the model in the background and write the result to Redis + Postgres.
-    // We split the 8-field schema into two parallel calls (Part-1: analysis sections,
-    // Part-2: action sections). Total wall time ≈ max(t1, t2) instead of t1+t2,
-    // cutting expected latency roughly in half. Each call targets ~800 output tokens.
+    // No AbortController — let the model run to natural completion.
+    // EdgeRuntime.waitUntil keeps the worker alive until the fetch resolves.
     const work = (async () => {
       try {
-        // Shared abort — if either call hangs past 90 s the whole job fails cleanly.
-        const abortCtrl = new AbortController();
-        const abortTimer = setTimeout(() => abortCtrl.abort(), 90_000);
-
-        const callPart = async (sysPrompt: string): Promise<Record<string, unknown>> => {
-          const res = await fetch(NVIDIA_URL, {
-            method: "POST",
-            signal: abortCtrl.signal,
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              Accept: "application/json",
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model,
-              messages: [
-                { role: "system", content: sysPrompt },
-                { role: "user", content: userPrompt },
-              ],
-              max_tokens: 900,
-              temperature: 0.3,
-              top_p: 0.9,
-              stream: false,
-            }),
-          });
-          if (!res.ok) {
-            const errText = await res.text().catch(() => "");
-            throw new Error(`Upstream ${res.status}: ${errText.slice(0, 300)}`);
-          }
-          const data = await res.json();
-          const content: string = data?.choices?.[0]?.message?.content ?? "";
-          if (!content) throw new Error("Empty model response");
-          return extractJson(content) as Record<string, unknown>;
-        };
-
-        let part1: Record<string, unknown>;
-        let part2: Record<string, unknown>;
-        try {
-          [part1, part2] = await Promise.all([
-            callPart(DEEP_PART1_SYSTEM),
-            callPart(DEEP_PART2_SYSTEM),
-          ]);
-        } finally {
-          clearTimeout(abortTimer);
+        const res = await fetch(NVIDIA_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            max_tokens: 2000,
+            temperature: 0.3,
+            top_p: 0.9,
+            stream: false,
+          }),
+        });
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          throw new Error(`Upstream ${res.status}: ${errText.slice(0, 300)}`);
         }
-
-        const report: Record<string, unknown> = { ...part1, ...part2 };
+        const data = await res.json();
+        const content: string = data?.choices?.[0]?.message?.content ?? "";
+        if (!content) throw new Error("Empty model response");
+        const report = extractJson(content);
         report.generatedAt = new Date().toISOString();
         report.model = model;
         report.mode = "deep";
