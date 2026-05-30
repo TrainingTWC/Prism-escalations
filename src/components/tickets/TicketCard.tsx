@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { MapPin, Clock, User, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
-import { SeverityBadge, StatusPill, CategoryBadge, AutoSourceBadge, PatternBadge } from './Badges'
+import { SeverityBadge, StatusPill, AutoSourceBadge, PatternBadge } from './Badges'
 import { SlaCountdown } from './SlaCountdown'
 import type { TicketWithRelations } from '@/lib/supabase/database.types'
 import { formatDistanceToNow } from 'date-fns'
@@ -16,15 +16,17 @@ interface TicketCardProps {
   onToggle?: (id: string) => void
 }
 
-const STUB_GRADIENT: Record<string, string> = {
-  critical: 'linear-gradient(160deg, #EF4444 0%, #B91C1C 100%)',
-  high: 'linear-gradient(160deg, #ED9560 0%, #A85225 100%)',
-  medium: 'linear-gradient(160deg, #E07B39 0%, #A85225 100%)',
-  low: 'linear-gradient(160deg, #C76A2E 0%, #7A3A0E 100%)',
+const CATEGORY_STUB: Record<string, [string, string]> = {
+  Operations: ['#E07B39', '#A85225'],
+  HR:         ['#EC4899', '#9D174D'],
+  IT:         ['#3B82F6', '#1E40AF'],
+  SCM:        ['#22C55E', '#15803D'],
+  QA:         ['#EAB308', '#A16207'],
 }
 
 export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }: TicketCardProps) {
-  const stub = STUB_GRADIENT[ticket.severity] ?? STUB_GRADIENT.medium
+  const [stubFrom, stubTo] = CATEGORY_STUB[ticket.category] ?? ['#C76A2E', '#7A3A0E']
+  const stub = `linear-gradient(160deg, ${stubFrom} 0%, ${stubTo} 100%)`
   const isClosed = ticket.status === 'closed' || ticket.status === 'resolved'
 
   const inner = (
@@ -36,17 +38,17 @@ export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }
       )}
       style={{ background: selected ? 'var(--accent-dim)' : undefined }}
     >
-      {/* ── Left stub: vertical TICKET label ────────────────────────── */}
+      {/* ── Left stub: department label, colour-coded ───────────────── */}
       <div
         className="relative shrink-0 w-[40px] flex flex-col items-center justify-between py-3"
         style={{ background: stub }}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
         <span
-          className="font-black uppercase text-white text-[10px] tracking-[0.32em] whitespace-nowrap"
+          className="font-black uppercase text-white text-[10px] tracking-[0.22em] whitespace-nowrap"
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
         >
-          Ticket
+          {ticket.category}
         </span>
         <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
       </div>
@@ -85,7 +87,6 @@ export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }
           <div className="flex-1 min-w-0">
             {/* Top row */}
             <div className="flex items-center gap-2 flex-wrap mb-2">
-              <CategoryBadge category={ticket.category} />
               <span className="text-[11px] font-mono-value text-[var(--text-muted)] font-semibold">
                 #{ticket.ticket_code}
               </span>

@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { AppShell } from '@/components/layout/AppShell'
 import { TicketCard } from '@/components/tickets/TicketCard'
 import { GlassPanel } from '@/components/ui/GlassPanel'
@@ -23,16 +23,24 @@ interface Filters {
   status: string
   severity: string
   category: string
+  store: string
+  region: string
+  am: string
+  trainer: string
   search: string
 }
+
+type RosterSlice = { name: string; designation: string | null; store_code: string | null }
+const EMPTY_FILTERS: Filters = { status: '', severity: '', category: '', store: '', region: '', am: '', trainer: '', search: '' }
 
 export default function TicketsPage() {
   const { profile } = useAuthStore()
   const isSuperAdmin = profile?.role === 'super_admin'
 
   const [tickets, setTickets] = useState<TicketWithRelations[]>([])
+  const [roster, setRoster] = useState<RosterSlice[]>([])
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<Filters>({ status: '', severity: '', category: '', search: '' })
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
 
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -64,6 +72,95 @@ export default function TicketsPage() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchTickets])
 
+  // Employee roster — used to resolve each store's Area Manager / Trainer
+  useEffect(() => {
+    const loadRoster = async () => {
+      const PAGE = 1000
+      const all: RosterSlice[] = []
+      let offset = 0
+      while (true) {
+        const { data: page } = await supabase
+          .from('employee_roster')
+          .select('name, designation, store_code, is_active')
+          .eq('is_active', true)
+          .range(offset, offset + PAGE - 1)
+        if (!page || page.length === 0) break
+        all.push(...(page as RosterSlice[]))
+        if (page.length < PAGE) break
+        offset += PAGE
+      }
+      setRoster(all)
+    }
+    loadRoster()
+  }, [])
+
+  // store_code → AM / Trainer name
+  const amByStoreCode = useMemo(() => {
+    const m = new Map<string, string>()
+    roster.forEach((r) => {
+      if (r.store_code && r.designation && /area\s*manager|^am$/i.test(r.designation) && !m.has(r.store_code)) {
+        m.set(r.store_code, r.name)
+      }
+    })
+    return m
+  }, [roster])
+
+  const trainerByStoreCode = useMemo(() => {
+    const m = new Map<string, string>()
+    roster.forEach((r) => {
+      if (r.store_code && r.designation && /trainer/i.test(r.designation) && !m.has(r.store_code)) {
+        m.set(r.store_code, r.name)
+      }
+    })
+    return m
+  }, [roster])
+
+  // Filter option lists, derived from the loaded tickets
+  const storeOptions = useMemo(() => {
+    const m = new Map<string, string>()
+    tickets.forEach((t) => { if (t.store) m.set(t.store.id, t.store.store_name) })
+    return Array.from(m.entries()).sort((a, b) => a[1].localeCompare(b[1]))
+  }, [tickets])
+
+  const regionOptions = useMemo(
+    () => Array.from(new Set(tickets.map((t) => t.store?.region).filter(Boolean) as string[])).sort(),
+    [tickets],
+  )
+
+  const amOptions = useMemo(() => {
+    const s = new Set<string>()
+    tickets.forEach((t) => {
+      const code = t.store?.store_code
+      if (code && amByStoreCode.has(code)) s.add(amByStoreCode.get(code)!)
+    })
+    return Array.from(s).sort()
+  }, [tickets, amByStoreCode])
+
+  const trainerOptions = useMemo(() => {
+    const s = new Set<string>()
+    tickets.forEach((t) => {
+      const code = t.store?.store_code
+      if (code && trainerByStoreCode.has(code)) s.add(trainerByStoreCode.get(code)!)
+    })
+    return Array.from(s).sort()
+  }, [tickets, trainerByStoreCode])
+
+  // Client-side filtering for store / region / AM / trainer
+  const visibleTickets = useMemo(() => tickets.filter((t) => {
+    if (filters.store && t.store?.id !== filters.store) return false
+    if (filters.region && t.store?.region !== filters.region) return false
+    if (filters.am) {
+      const code = t.store?.store_code
+      if (!code || amByStoreCode.get(code) !== filters.am) return false
+    }
+    if (filters.trainer) {
+      const code = t.store?.store_code
+      if (!code || trainerByStoreCode.get(code) !== filters.trainer) return false
+    }
+    return true
+  }), [tickets, filters.store, filters.region, filters.am, filters.trainer, amByStoreCode, trainerByStoreCode])
+
+
   const exitSelectMode = () => {
     setSelectMode(false)
     setSelected(new Set())
@@ -79,10 +176,10 @@ export default function TicketsPage() {
   }
 
   const toggleAll = () => {
-    if (selected.size === tickets.length) {
+    if (selected.size === visibleTickets.length) {
       setSelected(new Set())
     } else {
-      setSelected(new Set(tickets.map((t) => t.id)))
+      setSelected(new Set(visibleTickets.map((t) => t.id)))
     }
   }
 
@@ -102,18 +199,18 @@ export default function TicketsPage() {
     setDeleting(false)
   }
 
-  const hasFilters   = Boolean(filters.status || filters.severity || filters.category || filters.search)
-  const clearFilters = () => setFilters({ status: '', severity: '', category: '', search: '' })
+  const hasFilters   = Boolean(filters.status || filters.severity || filters.category || filters.store || filters.region || filters.am || filters.trainer || filters.search)
+  const clearFilters = () => setFilters(EMPTY_FILTERS)
 
   const selectClass = 'prism-input'
   const selectStyle = { width: 'auto', minWidth: 140, fontSize: 12 } as const
-  const allSelected = tickets.length > 0 && selected.size === tickets.length
+  const allSelected = visibleTickets.length > 0 && selected.size === visibleTickets.length
 
   return (
     <AppShell
       overline="Issue Queue"
       title="Tickets"
-      subtitle={`${tickets.length} ${tickets.length === 1 ? 'ticket' : 'tickets'} matching current view`}
+      subtitle={`${visibleTickets.length} ${visibleTickets.length === 1 ? 'ticket' : 'tickets'} matching current view`}
     >
       <FilterBar
         onSearch={(v) => setFilters((f) => ({ ...f, search: v }))}
@@ -124,7 +221,7 @@ export default function TicketsPage() {
         trailing={
           <div className="flex items-center gap-3">
             <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-              {loading ? '...' : `${tickets.length} results`}
+              {loading ? '...' : `${visibleTickets.length} results`}
             </span>
             {isSuperAdmin && !selectMode && (
               <button
@@ -164,6 +261,34 @@ export default function TicketsPage() {
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </FilterItem>
+        <FilterItem label="Store">
+          <select value={filters.store} onChange={(e) => setFilters((f) => ({ ...f, store: e.target.value }))} className={selectClass} style={{ ...selectStyle, minWidth: 150 }}>
+            <option value="">All Stores</option>
+            {storeOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
+        </FilterItem>
+        <FilterItem label="Region">
+          <select value={filters.region} onChange={(e) => setFilters((f) => ({ ...f, region: e.target.value }))} className={selectClass} style={{ ...selectStyle, minWidth: 130 }}>
+            <option value="">All Regions</option>
+            {regionOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </FilterItem>
+        {amOptions.length > 0 && (
+          <FilterItem label="Area Manager">
+            <select value={filters.am} onChange={(e) => setFilters((f) => ({ ...f, am: e.target.value }))} className={selectClass} style={{ ...selectStyle, minWidth: 150 }}>
+              <option value="">All AMs</option>
+              {amOptions.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </FilterItem>
+        )}
+        {trainerOptions.length > 0 && (
+          <FilterItem label="Trainer">
+            <select value={filters.trainer} onChange={(e) => setFilters((f) => ({ ...f, trainer: e.target.value }))} className={selectClass} style={{ ...selectStyle, minWidth: 150 }}>
+              <option value="">All Trainers</option>
+              {trainerOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </FilterItem>
+        )}
       </FilterBar>
 
       {selectMode && (
@@ -182,7 +307,7 @@ export default function TicketsPage() {
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
           {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 118 }} />)}
         </div>
-      ) : tickets.length === 0 ? (
+      ) : visibleTickets.length === 0 ? (
         <GlassPanel padding="lg" className="text-center">
           <Filter size={32} className="mx-auto mb-4 text-[var(--text-muted)]" />
           <p className="text-[14px] font-semibold text-[var(--text-secondary)] mb-1">No tickets found</p>
@@ -190,7 +315,7 @@ export default function TicketsPage() {
         </GlassPanel>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3" style={{ paddingBottom: selectMode ? 96 : 0 }}>
-          {tickets.map((ticket, i) => (
+          {visibleTickets.map((ticket, i) => (
             <TicketCard key={ticket.id} ticket={ticket} index={i} selectable={selectMode} selected={selected.has(ticket.id)} onToggle={toggleOne} />
           ))}
         </div>
