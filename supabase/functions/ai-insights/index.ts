@@ -124,13 +124,13 @@ Conform EXACTLY to this schema:
 {
   "executiveSummary": "string — 3-5 sentences. The strategic story of what is really happening and why it matters. Lead with the sharpest insight.",
   "situationAssessment": "string — 3-5 sentences of deep diagnostic read of the current operational state, connecting multiple metrics into one coherent picture.",
-  "rootCauses": [                    // 2-4 structural drivers behind the headline problems
-    { "title": "string", "analysis": "string — the causal chain, <=320 chars", "evidence": "string — the exact figures that support it", "confidence": number }
+  "rootCauses": [                    // 2-3 structural drivers behind the headline problems
+    { "title": "string", "analysis": "string — the causal chain, <=240 chars", "evidence": "string — the exact figures that support it", "confidence": number }
   ],
-  "strategicPlays": [                // 3-5 high-leverage moves, most impactful first
+  "strategicPlays": [                // 2-3 high-leverage moves, most impactful first
     {
       "title": "string",
-      "rationale": "string — why this, why now, <=260 chars",
+      "rationale": "string — why this, why now, <=200 chars",
       "steps": ["string — concrete sequential action", "string", "string"],
       "expectedOutcome": "string — quantify the target effect",
       "effort": "low|medium|high",
@@ -139,12 +139,12 @@ Conform EXACTLY to this schema:
     }
   ],
   "scenarios": [                     // exactly 3: best case, most likely, worst case (in that order)
-    { "name": "string — e.g. 'Best case'", "probability": number, "narrative": "string — what unfolds over 30 days, <=300 chars", "impact": "low|medium|high|severe" }
+    { "name": "string — e.g. 'Best case'", "probability": number, "narrative": "string — what unfolds over 30 days, <=200 chars", "impact": "low|medium|high|severe" }
   ],
-  "kpiTargets": [                    // 3-5 metrics to drive, with concrete targets
+  "kpiTargets": [                    // 2-3 metrics to drive, with concrete targets
     { "metric": "string", "current": "string", "target": "string", "timeframe": "string" }
   ],
-  "watchList": [                     // 2-4 leading indicators to watch with trigger thresholds
+  "watchList": [                     // 2-3 leading indicators to watch with trigger thresholds
     { "item": "string", "why": "string", "trigger": "string — the threshold that should sound an alarm" }
   ],
   "bottomLine": "string — one decisive closing sentence: the single most important thing to do now."
@@ -165,21 +165,25 @@ function buildFastUserPrompt(snapshot: unknown): string {
 }
 
 function buildDeepUserPrompt(snapshot: unknown, baseReport: unknown, evidence: unknown): string {
+  // Compact JSON (no indentation) keeps the prompt tight — prefill is fast but
+  // every token saved still reduces context-window pressure on the model.
   const lines = [
     "Produce the deep research JSON. Pressure-test and extend the fast briefing using the full snapshot.",
     "",
     "METRICS SNAPSHOT (JSON):",
-    JSON.stringify(snapshot, null, 2),
+    JSON.stringify(snapshot),
     "",
     "FAST FIRST-PASS BRIEFING (JSON) — your starting hypothesis to deepen, not repeat:",
-    JSON.stringify(baseReport ?? {}, null, 2),
+    JSON.stringify(baseReport ?? {}),
   ];
-  if (Array.isArray(evidence) && evidence.length > 0) {
+  // Cap evidence at 5 tickets — the most critical signals are at the top anyway.
+  const evidenceSlice = Array.isArray(evidence) ? evidence.slice(0, 5) : [];
+  if (evidenceSlice.length > 0) {
     lines.push(
       "",
-      "EVIDENCE SAMPLE — the most decision-relevant open tickets (breached, then critical, then oldest).",
+      "EVIDENCE SAMPLE — top 5 most decision-relevant open tickets (breached, then critical, then oldest).",
       "Use these concrete cases to ground root-cause reasoning and name specific patterns:",
-      JSON.stringify(evidence, null, 2),
+      JSON.stringify(evidenceSlice),
     );
   }
   return lines.join("\n");
@@ -429,25 +433,34 @@ Deno.serve(async (req: Request) => {
     // 2. Run the model in the background and write the result to Redis + Postgres.
     const work = (async () => {
       try {
-        const res = await fetch(NVIDIA_URL, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            max_tokens: 2400,
-            temperature: 0.5,
-            top_p: 0.9,
-            stream: false,
-          }),
-        });
+        // Hard cap: abort if the model hasn't responded within 90 s.
+        const abortCtrl = new AbortController();
+        const abortTimer = setTimeout(() => abortCtrl.abort(), 90_000);
+        let res: Response;
+        try {
+          res = await fetch(NVIDIA_URL, {
+            method: "POST",
+            signal: abortCtrl.signal,
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt },
+              ],
+              max_tokens: 1600,
+              temperature: 0.3,
+              top_p: 0.9,
+              stream: false,
+            }),
+          });
+        } finally {
+          clearTimeout(abortTimer);
+        }
         if (!res.ok) {
           const errText = await res.text().catch(() => "");
           throw new Error(`Upstream ${res.status}: ${errText.slice(0, 300)}`);

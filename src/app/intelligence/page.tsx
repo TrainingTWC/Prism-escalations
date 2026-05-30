@@ -134,7 +134,7 @@ export default function IntelligencePage() {
         // browser never downloads every ticket — this scales to thousands.
         const [snap, ev] = await Promise.all([
           fetchAnalyticsSnapshot(),
-          fetchEvidenceSample(12),
+          fetchEvidenceSample(5),
         ])
         setSnapshot(snap)
         setEvidence(ev)
