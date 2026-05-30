@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
 
 interface SidebarCtx {
   collapsed: boolean
@@ -20,9 +20,10 @@ export const SIDEBAR_WIDTH = 248
 export const SIDEBAR_WIDTH_COLLAPSED = 72
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
-  const width = SIDEBAR_WIDTH
+  const [collapsed, setCollapsed] = useState(false)
+  const width = collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH
   return (
-    <Ctx.Provider value={{ collapsed: false, toggle: () => {}, setCollapsed: () => {}, width }}>
+    <Ctx.Provider value={{ collapsed, toggle: () => setCollapsed((c) => !c), setCollapsed, width }}>
       {children}
     </Ctx.Provider>
   )
