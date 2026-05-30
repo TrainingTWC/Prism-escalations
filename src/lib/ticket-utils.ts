@@ -1,10 +1,15 @@
 import type { Ticket } from '@/lib/supabase/database.types'
 
 export const SLA_MINUTES: Record<string, number> = {
-  critical: 30,
-  high: 120,
-  medium: 1440,
-  low: 4320,
+  P0: 240,
+  P1: 1440,
+  P2: 4320,
+  P3: 10080,
+  // Legacy fallbacks
+  critical: 240,
+  high: 1440,
+  medium: 4320,
+  low: 10080,
 }
 
 export function getSlaDeadline(severity: string, createdAt: string): Date {

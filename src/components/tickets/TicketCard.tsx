@@ -17,11 +17,14 @@ interface TicketCardProps {
 }
 
 const CATEGORY_STUB: Record<string, [string, string]> = {
-  Operations: ['#E07B39', '#A85225'],
-  HR:         ['#EC4899', '#9D174D'],
-  IT:         ['#3B82F6', '#1E40AF'],
-  SCM:        ['#22C55E', '#15803D'],
-  QA:         ['#EAB308', '#A16207'],
+  Operations:  ['#E07B39', '#A85225'],
+  HR:          ['#EC4899', '#9D174D'],
+  IT:          ['#3B82F6', '#1E40AF'],
+  SCM:         ['#22C55E', '#15803D'],
+  QA:          ['#EAB308', '#A16207'],
+  Finance:     ['#8B5CF6', '#5B21B6'],
+  Maintenance: ['#6B7280', '#374151'],
+  'L&D':       ['#F97316', '#C2410C'],
 }
 
 export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }: TicketCardProps) {

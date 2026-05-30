@@ -6,10 +6,15 @@ interface SeverityBadgeProps { severity: string; size?: 'sm' | 'md' }
 interface StatusPillProps { status: string; size?: 'sm' | 'md' }
 
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string }> = {
-  critical: { color: 'var(--color-danger)',  bg: 'rgba(239, 68, 68, 0.10)',  label: 'Critical' },
-  high:     { color: 'var(--color-warning)', bg: 'rgba(234, 179, 8, 0.10)',  label: 'High' },
-  medium:   { color: 'var(--color-info)',    bg: 'rgba(59, 130, 246, 0.10)', label: 'Medium' },
-  low:      { color: 'var(--text-tertiary)', bg: 'rgba(122, 122, 136, 0.10)', label: 'Low' },
+  P0: { color: 'var(--color-danger)',   bg: 'rgba(239, 68, 68, 0.10)',   label: 'P0 · Critical' },
+  P1: { color: 'var(--color-warning)',  bg: 'rgba(234, 179, 8, 0.10)',   label: 'P1 · High' },
+  P2: { color: 'var(--color-info)',     bg: 'rgba(59, 130, 246, 0.10)',  label: 'P2 · Medium' },
+  P3: { color: 'var(--text-tertiary)',  bg: 'rgba(122, 122, 136, 0.10)', label: 'P3 · Low' },
+  // Legacy fallbacks
+  critical: { color: 'var(--color-danger)',   bg: 'rgba(239, 68, 68, 0.10)',   label: 'P0 · Critical' },
+  high:     { color: 'var(--color-warning)',  bg: 'rgba(234, 179, 8, 0.10)',   label: 'P1 · High' },
+  medium:   { color: 'var(--color-info)',     bg: 'rgba(59, 130, 246, 0.10)',  label: 'P2 · Medium' },
+  low:      { color: 'var(--text-tertiary)',  bg: 'rgba(122, 122, 136, 0.10)', label: 'P3 · Low' },
 }
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
@@ -25,7 +30,7 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
 }
 
 export function SeverityBadge({ severity, size = 'sm' }: SeverityBadgeProps) {
-  const cfg = SEVERITY_CONFIG[severity] ?? SEVERITY_CONFIG.medium
+  const cfg = SEVERITY_CONFIG[severity] ?? SEVERITY_CONFIG.P2
   const fontSize = size === 'sm' ? 10 : 11
   return (
     <span

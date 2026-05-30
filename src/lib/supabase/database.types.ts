@@ -113,6 +113,8 @@ export type Database = {
           intelligence_pattern_flag: boolean | null
           intelligence_pattern_note: string | null
           intelligence_suggested_role: string | null
+          secondary_departments: string[] | null
+          root_cause_category: string | null
         }
         Insert: {
           id?: string
@@ -147,6 +149,8 @@ export type Database = {
           intelligence_pattern_flag?: boolean | null
           intelligence_pattern_note?: string | null
           intelligence_suggested_role?: string | null
+          secondary_departments?: string[] | null
+          root_cause_category?: string | null
         }
         Update: {
           ticket_code?: string
@@ -179,6 +183,8 @@ export type Database = {
           intelligence_pattern_flag?: boolean | null
           intelligence_pattern_note?: string | null
           intelligence_suggested_role?: string | null
+          secondary_departments?: string[] | null
+          root_cause_category?: string | null
         }
       }
       escalations: {
