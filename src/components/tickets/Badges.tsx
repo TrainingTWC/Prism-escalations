@@ -20,7 +20,8 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string
 const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
   open:         { color: 'var(--accent)',         bg: 'var(--accent-dim)' },
   acknowledged: { color: 'var(--color-info)',     bg: 'rgba(59,130,246,0.10)' },
-  accepted:     { color: 'var(--color-info)',     bg: 'rgba(59,130,246,0.10)' },
+  accepted:     { color: 'var(--color-success)',  bg: 'rgba(34,197,94,0.10)' },
+  rejected:     { color: 'var(--color-danger)',   bg: 'rgba(239,68,68,0.10)' },
   in_progress:  { color: 'var(--color-info)',     bg: 'rgba(59,130,246,0.10)' },
   waiting:      { color: 'var(--color-warning)',  bg: 'rgba(234,179,8,0.10)' },
   snag:         { color: 'var(--color-danger)',   bg: 'rgba(239,68,68,0.10)' },

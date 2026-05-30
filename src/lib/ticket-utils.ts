@@ -53,8 +53,8 @@ export const ESCALATION_LABELS: Record<number, string> = {
 }
 
 export const STATUS_FLOW: Record<string, string[]> = {
-  open: ['acknowledged'],
-  acknowledged: ['accepted'],
+  open: ['accepted', 'rejected'],
+  acknowledged: ['accepted'],           // legacy — existing acknowledged tickets can still move forward
   accepted: ['in_progress'],
   in_progress: ['waiting', 'snag', 'resolved'],
   waiting: ['in_progress', 'snag'],
@@ -62,17 +62,19 @@ export const STATUS_FLOW: Record<string, string[]> = {
   resolved: ['verification'],
   verification: ['closed', 'in_progress'],
   closed: [],
+  rejected: [],
 }
 
 export const STATUS_LABELS: Record<string, string> = {
   open: 'Open',
   acknowledged: 'Acknowledged',
   accepted: 'Accepted',
+  rejected: 'Rejected',
   in_progress: 'In Progress',
   waiting: 'Waiting',
   snag: 'SNAG',
   resolved: 'Resolved',
-  verification: 'Verification',
+  verification: 'Verified',
   closed: 'Closed',
 }
 

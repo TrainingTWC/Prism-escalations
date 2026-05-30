@@ -19,7 +19,14 @@ import {
   CheckCircle, ChevronRight, Sparkles, RefreshCw, ExternalLink, Trash2,
 } from 'lucide-react'
 
-const STATUS_ORDER = ['open', 'acknowledged', 'accepted', 'in_progress', 'waiting', 'snag', 'resolved', 'verification', 'closed']
+// Linear happy-path shown in the timeline (rejected is a separate terminal state)
+const STATUS_ORDER = ['open', 'accepted', 'in_progress', 'waiting', 'snag', 'resolved', 'verification', 'closed']
+
+// Human-readable action labels for specific transitions
+const TRANSITION_LABELS: Record<string, string> = {
+  accepted: 'Accept',
+  rejected: 'Reject',
+}
 
 type TicketUpdate = {
   status: string
@@ -83,7 +90,7 @@ function TicketDetailInner() {
       status: newStatus,
       updated_at: new Date().toISOString(),
     }
-    if (newStatus === 'acknowledged' && !ticket.first_response_at) {
+    if ((newStatus === 'accepted' || newStatus === 'acknowledged') && !ticket.first_response_at) {
       updates.first_response_at = new Date().toISOString()
     }
     if (newStatus === 'resolved') updates.resolved_at = new Date().toISOString()
@@ -144,7 +151,11 @@ function TicketDetailInner() {
   }
 
   const nextStatuses = STATUS_FLOW[ticket.status] || []
-  const currentStepIndex = STATUS_ORDER.indexOf(ticket.status)
+  // For rejected tickets, treat as if still at 'open' for the (hidden) timeline index.
+  // Acknowledged is legacy — treat it as if it were at the 'open' position.
+  const currentStepIndex = ticket.status === 'rejected' || ticket.status === 'acknowledged'
+    ? STATUS_ORDER.indexOf('open')
+    : STATUS_ORDER.indexOf(ticket.status)
 
   return (
     <AppShell
@@ -225,63 +236,94 @@ function TicketDetailInner() {
 
             {/* Status timeline */}
             <GlassPanel padding="md" title="Status Timeline">
-              <div className="flex items-center overflow-x-auto pb-1">
-                {STATUS_ORDER.map((status, idx) => {
-                  const isPast    = idx < currentStepIndex
-                  const isCurrent = idx === currentStepIndex
-                  const dotBg    = isCurrent ? 'var(--accent)' : isPast ? 'var(--color-success)' : 'var(--bg-tertiary)'
-                  const dotBorder = isCurrent ? 'var(--accent)' : isPast ? 'var(--color-success)' : 'var(--border-primary)'
-                  const labelColor = isCurrent ? 'var(--accent)' : isPast ? 'var(--color-success)' : 'var(--text-muted)'
-                  return (
-                    <div key={status} className="flex items-center">
-                      <div className="flex flex-col items-center gap-1">
-                        <div
-                          className="w-7 h-7 rounded-full flex items-center justify-center transition-all"
-                          style={{ background: dotBg, border: `2px solid ${dotBorder}` }}
-                        >
-                          {isPast && <CheckCircle size={12} color="var(--bg-primary)" />}
-                          {isCurrent && (
-                            <span
-                              className="block rounded-full"
-                              style={{ width: 8, height: 8, background: 'var(--bg-primary)' }}
-                            />
-                          )}
+              {ticket.status === 'rejected' ? (
+                <div
+                  className="flex items-center gap-3 px-4 py-3 rounded-[10px]"
+                  style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
+                >
+                  <span
+                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold"
+                    style={{ background: 'var(--color-danger)', color: '#fff' }}
+                  >✕</span>
+                  <div>
+                    <p className="text-[13px] font-bold" style={{ color: 'var(--color-danger)' }}>Ticket Rejected</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">This ticket was rejected and will not be actioned.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center overflow-x-auto pb-1">
+                  {STATUS_ORDER.map((status, idx) => {
+                    const isPast    = idx < currentStepIndex
+                    const isCurrent = idx === currentStepIndex
+                    const dotBg    = isCurrent ? 'var(--accent)' : isPast ? 'var(--color-success)' : 'var(--bg-tertiary)'
+                    const dotBorder = isCurrent ? 'var(--accent)' : isPast ? 'var(--color-success)' : 'var(--border-primary)'
+                    const labelColor = isCurrent ? 'var(--accent)' : isPast ? 'var(--color-success)' : 'var(--text-muted)'
+                    return (
+                      <div key={status} className="flex items-center">
+                        <div className="flex flex-col items-center gap-1">
+                          <div
+                            className="w-7 h-7 rounded-full flex items-center justify-center transition-all"
+                            style={{ background: dotBg, border: `2px solid ${dotBorder}` }}
+                          >
+                            {isPast && <CheckCircle size={12} color="var(--bg-primary)" />}
+                            {isCurrent && (
+                              <span
+                                className="block rounded-full"
+                                style={{ width: 8, height: 8, background: 'var(--bg-primary)' }}
+                              />
+                            )}
+                          </div>
+                          <span
+                            className="text-[9px] font-bold uppercase tracking-[0.04em] whitespace-nowrap"
+                            style={{ color: labelColor }}
+                          >
+                            {STATUS_LABELS[status]}
+                          </span>
                         </div>
-                        <span
-                          className="text-[9px] font-bold uppercase tracking-[0.04em] whitespace-nowrap"
-                          style={{ color: labelColor }}
-                        >
-                          {STATUS_LABELS[status]}
-                        </span>
+                        {idx < STATUS_ORDER.length - 1 && (
+                          <div
+                            className="mx-0.5 mb-[18px] h-0.5 shrink-0"
+                            style={{
+                              width: 32,
+                              background: idx < currentStepIndex ? 'var(--color-success)' : 'var(--border-subtle)',
+                            }}
+                          />
+                        )}
                       </div>
-                      {idx < STATUS_ORDER.length - 1 && (
-                        <div
-                          className="mx-0.5 mb-[18px] h-0.5 shrink-0"
-                          style={{
-                            width: 32,
-                            background: idx < currentStepIndex ? 'var(--color-success)' : 'var(--border-subtle)',
-                          }}
-                        />
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+                    )
+                  })}
+                </div>
+              )}
 
               {nextStatuses.length > 0 && (
                 <div className="flex gap-2 mt-4 flex-wrap">
-                  {nextStatuses.map((next) => (
-                    <Button
-                      key={next}
-                      variant="ghost"
-                      size="sm"
-                      disabled={transitioning}
-                      onClick={() => transitionStatus(next)}
-                      trailing={<ChevronRight size={12} />}
-                    >
-                      Move to {STATUS_LABELS[next]}
-                    </Button>
-                  ))}
+                  {nextStatuses.map((next) => {
+                    const isReject = next === 'rejected'
+                    return (
+                      <button
+                        key={next}
+                        disabled={transitioning}
+                        onClick={() => transitionStatus(next)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold transition-all disabled:opacity-50"
+                        style={isReject ? {
+                          color: 'var(--color-danger)',
+                          background: 'rgba(239,68,68,0.08)',
+                          border: '1px solid rgba(239,68,68,0.25)',
+                        } : next === 'accepted' ? {
+                          color: 'var(--color-success)',
+                          background: 'rgba(34,197,94,0.08)',
+                          border: '1px solid rgba(34,197,94,0.25)',
+                        } : {
+                          color: 'var(--text-secondary)',
+                          background: 'var(--card-bg)',
+                          border: '1px solid var(--border-subtle)',
+                        }}
+                      >
+                        {TRANSITION_LABELS[next] ?? `Move to ${STATUS_LABELS[next]}`}
+                        {!isReject && <ChevronRight size={12} />}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </GlassPanel>
