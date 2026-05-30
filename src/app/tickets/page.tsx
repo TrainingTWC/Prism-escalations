@@ -179,8 +179,8 @@ export default function TicketsPage() {
       )}
 
       {loading ? (
-        <div className="flex flex-col gap-2.5">
-          {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 96 }} />)}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 118 }} />)}
         </div>
       ) : tickets.length === 0 ? (
         <GlassPanel padding="lg" className="text-center">
@@ -189,7 +189,7 @@ export default function TicketsPage() {
           <p className="text-xs text-[var(--text-muted)]">{hasFilters ? 'Try clearing your filters' : 'Create your first ticket to get started'}</p>
         </GlassPanel>
       ) : (
-        <div className="flex flex-col gap-2.5" style={{ paddingBottom: selectMode ? 96 : 0 }}>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3" style={{ paddingBottom: selectMode ? 96 : 0 }}>
           {tickets.map((ticket, i) => (
             <TicketCard key={ticket.id} ticket={ticket} index={i} selectable={selectMode} selected={selected.has(ticket.id)} onToggle={toggleOne} />
           ))}

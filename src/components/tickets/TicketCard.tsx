@@ -36,17 +36,17 @@ export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }
       )}
       style={{ background: selected ? 'var(--accent-dim)' : undefined }}
     >
-      {/* ── Left stub: vertical ticket code ─────────────────────────── */}
+      {/* ── Left stub: vertical TICKET label ────────────────────────── */}
       <div
-        className="relative shrink-0 w-[54px] flex flex-col items-center justify-between py-3"
+        className="relative shrink-0 w-[40px] flex flex-col items-center justify-between py-3"
         style={{ background: stub }}
       >
-        <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/70">Ticket</span>
+        <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
         <span
-          className="font-mono-value font-bold text-white text-[13px] tracking-[0.12em] whitespace-nowrap"
+          className="font-black uppercase text-white text-[10px] tracking-[0.32em] whitespace-nowrap"
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
         >
-          #{ticket.ticket_code}
+          Ticket
         </span>
         <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
       </div>
@@ -86,6 +86,9 @@ export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }
             {/* Top row */}
             <div className="flex items-center gap-2 flex-wrap mb-2">
               <CategoryBadge category={ticket.category} />
+              <span className="text-[11px] font-mono-value text-[var(--text-muted)] font-semibold">
+                #{ticket.ticket_code}
+              </span>
               <SeverityBadge severity={ticket.severity} />
               <StatusPill status={ticket.status} />
               {ticket.intelligence_source && (
