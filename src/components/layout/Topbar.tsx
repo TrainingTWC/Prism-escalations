@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { Bell, Plus, Search, Sun, Moon, KeyRound, LogOut } from 'lucide-react'
+import { Plus, Search, Sun, Moon, KeyRound, LogOut } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import { useTheme } from '@/lib/theme-context'
+import { NotificationBell } from './NotificationBell'
 
 export function Topbar() {
   const { profile, signOut } = useAuthStore()
@@ -64,22 +65,8 @@ export function Topbar() {
           {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
         </button>
 
-        {/* Bell */}
-        <button
-          aria-label="Notifications"
-          className="relative w-9 h-9 rounded-lg flex items-center justify-center transition-colors"
-          style={{
-            background: 'var(--card-bg)',
-            border: '1px solid var(--border-subtle)',
-            color: 'var(--text-tertiary)',
-          }}
-        >
-          <Bell size={14} />
-          <span
-            className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
-            style={{ background: 'var(--accent)', boxShadow: '0 0 0 2px var(--sidebar-bg)' }}
-          />
-        </button>
+        {/* Notifications */}
+        <NotificationBell />
 
         {/* User */}
         {profile && (

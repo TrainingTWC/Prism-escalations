@@ -34,9 +34,10 @@ const EFFORT_TONE: Record<string, string> = {
 const IMPACT_TONE: Record<string, string> = {
   low: '#22C55E', medium: '#F59E0B', high: '#E07B39', severe: '#EF4444',
 }
-const DEEP_ACCENT = '#8B5CF6'
+const DEEP_ACCENT = '#E07B39'
+const INTEL_BRAND = 'Prism Intelligence'
 function tone(map: Record<string, string>, key?: string) {
-  return (key && map[key]) || '#8B5CF6'
+  return (key && map[key]) || '#E07B39'
 }
 function healthTone(score: number) {
   if (score >= 75) return '#22C55E'
@@ -229,7 +230,7 @@ export default function IntelligencePage() {
     >
       {/* ── Hero: headline + health ─────────────────────────────────────────── */}
       <div className="rounded-[18px] p-6 mb-5 relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, rgba(224,123,57,0.10), rgba(139,92,246,0.08))', border: '1px solid var(--border-primary)' }}>
+        style={{ background: 'linear-gradient(135deg, rgba(224,123,57,0.12), rgba(199,106,46,0.05))', border: '1px solid var(--border-primary)' }}>
         <div className="absolute -right-10 -top-10 w-44 h-44 rounded-full blur-3xl" style={{ background: 'rgba(224,123,57,0.18)' }} />
         <div className="relative flex flex-col lg:flex-row lg:items-center gap-6 justify-between">
           <div className="min-w-0 flex-1">
@@ -238,7 +239,7 @@ export default function IntelligencePage() {
                 <Brain size={15} />
               </span>
               <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--accent)]">AI Operational Briefing</span>
-              {report?.model && <span className="text-[10px] text-[var(--text-muted)]">· {report.model}</span>}
+              <span className="text-[10px] text-[var(--text-muted)]">· {INTEL_BRAND}</span>
             </div>
 
             {aiLoading && !report ? (
@@ -287,7 +288,7 @@ export default function IntelligencePage() {
       {/* ── deterministic stat strip ────────────────────────────────────────── */}
       {snapshot && (
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3 mb-5">
-          <Stat label="Active" value={snapshot.totals.active} icon={<Activity size={14} />} tone="#8B5CF6" />
+          <Stat label="Active" value={snapshot.totals.active} icon={<Activity size={14} />} tone="#E07B39" />
           <Stat label="Critical open" value={snapshot.totals.criticalOpen} icon={<ShieldAlert size={14} />} tone="#EF4444" />
           <Stat label="SLA breached" value={snapshot.totals.breachedOpen} icon={<AlertTriangle size={14} />} tone="#F59E0B" />
           <Stat label="SLA compliance" value={snapshot.rates.slaCompliancePct != null ? `${snapshot.rates.slaCompliancePct}%` : '—'} icon={<Gauge size={14} />} tone="#22C55E" />
@@ -316,7 +317,7 @@ export default function IntelligencePage() {
             <YAxis tick={axisStyle} tickLine={false} axisLine={false} allowDecimals={false} />
             <Tooltip content={<ChartTooltip />} />
             <Area type="monotone" dataKey="actual" name="Actual" stroke="#E07B39" strokeWidth={2} fill="url(#aiVol)" dot={false} connectNulls />
-            <Line type="monotone" dataKey="forecast" name="Forecast" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+            <Line type="monotone" dataKey="forecast" name="Forecast" stroke="#C76A2E" strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
             <ReferenceLine x={trendData.length ? trendData[snapshot ? snapshot.volumeTrend.length - 1 : 0]?.label : undefined} stroke="var(--border-subtle)" strokeDasharray="2 2" />
           </ComposedChart>
         </ResponsiveContainer>
@@ -348,7 +349,7 @@ export default function IntelligencePage() {
             </Panel>
 
             {/* Predictions */}
-            <Panel title="Predictions & forecasts" icon={<Target size={14} />} accent="#8B5CF6">
+            <Panel title="Predictions & forecasts" icon={<Target size={14} />} accent="#E07B39">
               <div className="flex flex-col gap-3">
                 {report.predictions.length === 0 && <Empty text="No predictions available." />}
                 {report.predictions.map((p, i) => {
@@ -365,7 +366,7 @@ export default function IntelligencePage() {
                         {typeof p.confidence === 'number' && (
                           <div className="flex items-center gap-1.5 flex-1 max-w-[140px]">
                             <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--border-subtle)' }}>
-                              <div className="h-full rounded-full" style={{ width: `${p.confidence}%`, background: '#8B5CF6' }} />
+                              <div className="h-full rounded-full" style={{ width: `${p.confidence}%`, background: '#E07B39' }} />
                             </div>
                             <span className="text-[10px] text-[var(--text-muted)]">{p.confidence}%</span>
                           </div>
@@ -424,7 +425,7 @@ export default function IntelligencePage() {
               </div>
             </Panel>
 
-            <Panel title="Anomalies" icon={<AlertTriangle size={14} />} accent="#06B6D4">
+            <Panel title="Anomalies" icon={<AlertTriangle size={14} />} accent="#C76A2E">
               <div className="flex flex-col gap-2.5">
                 {report.anomalies.length === 0 ? (
                   <div className="text-center py-6">
@@ -503,8 +504,8 @@ function DeepResearchSection({
   if (loading) {
     return (
       <div className="rounded-[18px] p-6 mb-5 relative overflow-hidden animate-fadeInUp"
-        style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.12), rgba(224,123,57,0.06))', border: `1px solid ${DEEP_ACCENT}55` }}>
-        <div className="absolute -left-12 -bottom-12 w-52 h-52 rounded-full blur-3xl pulse-breach" style={{ background: 'rgba(139,92,246,0.22)' }} />
+        style={{ background: 'linear-gradient(135deg, rgba(224,123,57,0.12), rgba(199,106,46,0.05))', border: `1px solid ${DEEP_ACCENT}55` }}>
+        <div className="absolute -left-12 -bottom-12 w-52 h-52 rounded-full blur-3xl pulse-breach" style={{ background: 'rgba(224,123,57,0.20)' }} />
         <div className="relative">
           <div className="flex items-center gap-3 mb-5">
             {(() => {
@@ -516,8 +517,8 @@ function DeepResearchSection({
                   <svg className="absolute inset-0 -rotate-90" width="48" height="48" viewBox="0 0 48 48" aria-hidden>
                     <defs>
                       <linearGradient id="deepProgressRing" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#8B5CF6" />
-                        <stop offset="100%" stopColor="#E07B39" />
+                        <stop offset="0%" stopColor="#E07B39" />
+                        <stop offset="100%" stopColor="#C76A2E" />
                       </linearGradient>
                     </defs>
                     <circle cx="24" cy="24" r="20" fill="none" stroke="var(--border-primary)" strokeWidth="3" opacity="0.45" />
@@ -534,7 +535,7 @@ function DeepResearchSection({
             })()}
             <div>
               <p className="text-[15px] font-black text-[var(--text-primary)]">Deep Research in progress</p>
-              <p className="text-[12px] text-[var(--text-muted)]">kimi-k2.6 is reasoning over your data · {elapsed}s elapsed</p>
+              <p className="text-[12px] text-[var(--text-muted)]">{INTEL_BRAND} is reasoning over your data · {elapsed}s elapsed</p>
             </div>
           </div>
           <div className="flex flex-col gap-2.5 max-w-md">
@@ -563,30 +564,54 @@ function DeepResearchSection({
 
   // ── Idle / CTA ───────────────────────────────────────────────────────────────
   if (!deep) {
+    const capabilities: { icon: React.ReactNode; title: string; desc: string }[] = [
+      { icon: <GitBranch size={15} />, title: 'Root-cause analysis', desc: 'Trace the why behind the numbers' },
+      { icon: <Crosshair size={15} />, title: 'Strategic roadmap', desc: 'Prioritised, step-by-step plays' },
+      { icon: <Telescope size={15} />, title: '30-day scenarios', desc: 'War-game likely futures' },
+      { icon: <Target size={15} />, title: 'KPI targets', desc: 'Where to aim, and by when' },
+      { icon: <Eye size={15} />, title: 'Watch-list', desc: 'Leading indicators to monitor' },
+      { icon: <Zap size={15} />, title: 'The bottom line', desc: 'One decisive recommendation' },
+    ]
     return (
       <div className="rounded-[18px] p-6 mb-5 relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.10), rgba(139,92,246,0.02))', border: `1px solid ${DEEP_ACCENT}40` }}>
-        <div className="absolute -right-10 -top-10 w-44 h-44 rounded-full blur-3xl" style={{ background: 'rgba(139,92,246,0.16)' }} />
-        <div className="relative flex flex-col lg:flex-row lg:items-center gap-5 justify-between">
+        style={{ background: 'linear-gradient(135deg, rgba(224,123,57,0.10), rgba(199,106,46,0.03))', border: '1px solid var(--accent-border)' }}>
+        <div className="absolute -right-10 -top-10 w-44 h-44 rounded-full blur-3xl" style={{ background: 'rgba(224,123,57,0.14)' }} />
+        <div className="relative flex flex-col lg:flex-row lg:items-start gap-5 justify-between mb-5">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg" style={{ background: `${DEEP_ACCENT}22`, color: DEEP_ACCENT }}>
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
                 <Telescope size={15} />
               </span>
-              <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: DEEP_ACCENT }}>Deep Research · kimi-k2.6</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: 'var(--accent)' }}>Deep Research · {INTEL_BRAND}</span>
             </div>
             <h3 className="text-[19px] lg:text-[22px] font-black text-[var(--text-primary)] mb-1.5">Go beyond the briefing</h3>
             <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed max-w-2xl">
-              Unleash a strategist-grade dive: root-cause analysis, a step-by-step action roadmap, 30-day scenario war-gaming,
-              KPI targets and a leading-indicator watch-list — all reasoned from your live data.
+              A strategist-grade dive across six dimensions — all reasoned from your live data.
             </p>
           </div>
           <button onClick={onRun}
             className="shrink-0 inline-flex items-center gap-2 h-11 px-5 rounded-xl text-[13px] font-bold transition-transform hover:scale-[1.03]"
-            style={{ background: DEEP_ACCENT, color: '#fff', boxShadow: '0 8px 24px rgba(139,92,246,0.35)' }}>
+            style={{ background: 'var(--accent)', color: '#fff', boxShadow: '0 8px 24px var(--accent-glow)' }}>
             <Microscope size={16} /> Run Deep Research
           </button>
         </div>
+
+        {/* capability grid */}
+        <div className="relative grid grid-cols-2 md:grid-cols-3 gap-3">
+          {capabilities.map((c, i) => (
+            <div key={i} className="flex items-start gap-2.5 rounded-[12px] p-3"
+              style={{ background: 'var(--card-bg)', border: '1px solid var(--border-subtle)' }}>
+              <span className="shrink-0 w-7 h-7 rounded-lg grid place-items-center mt-0.5" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                {c.icon}
+              </span>
+              <div className="min-w-0">
+                <p className="text-[12.5px] font-bold text-[var(--text-primary)] leading-tight">{c.title}</p>
+                <p className="text-[11px] text-[var(--text-muted)] leading-snug mt-0.5">{c.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
         {error && (
           <p className="relative text-[12px] mt-4" style={{ color: 'var(--color-danger)' }}>
             {error}
@@ -607,7 +632,7 @@ function DeepResearchSection({
           </span>
           <div>
             <p className="text-[15px] font-black text-[var(--text-primary)] leading-none">Deep Research</p>
-            <p className="text-[11px] text-[var(--text-muted)] mt-1">{deep.model ?? 'kimi-k2.6'} · {format(new Date(deep.generatedAt), 'MMM d, HH:mm')}</p>
+            <p className="text-[11px] text-[var(--text-muted)] mt-1">{INTEL_BRAND} · {format(new Date(deep.generatedAt), 'MMM d, HH:mm')}</p>
           </div>
         </div>
         <button onClick={onRun}
@@ -625,7 +650,7 @@ function DeepResearchSection({
         const urgentPlays = deep.strategicPlays.filter((p) => p.priority === 'urgent').length
         const tiles: { label: string; value: string; sub?: string; color: string; icon: React.ReactNode }[] = [
           { label: 'Root causes', value: String(deep.rootCauses.length), sub: avgConf != null ? `${avgConf}% avg conf.` : undefined, color: DEEP_ACCENT, icon: <GitBranch size={14} /> },
-          { label: 'Scenarios', value: String(deep.scenarios.length), sub: topScenario ? `top ${topScenario.probability ?? 0}%` : undefined, color: '#06B6D4', icon: <Telescope size={14} /> },
+          { label: 'Scenarios', value: String(deep.scenarios.length), sub: topScenario ? `top ${topScenario.probability ?? 0}%` : undefined, color: '#C76A2E', icon: <Telescope size={14} /> },
           { label: 'Strategic plays', value: String(deep.strategicPlays.length), sub: urgentPlays ? `${urgentPlays} urgent` : undefined, color: '#E07B39', icon: <Crosshair size={14} /> },
           { label: 'KPI targets', value: String(deep.kpiTargets.length), color: '#22C55E', icon: <Target size={14} /> },
           { label: 'Watch-list', value: String(deep.watchList.length), color: '#F59E0B', icon: <Eye size={14} /> },
@@ -648,7 +673,7 @@ function DeepResearchSection({
 
       {/* executive summary + situation */}
       <div className="rounded-[16px] p-5 mb-4 relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.10), rgba(139,92,246,0.02))', border: `1px solid ${DEEP_ACCENT}40` }}>
+        style={{ background: 'linear-gradient(135deg, rgba(224,123,57,0.10), rgba(199,106,46,0.03))', border: `1px solid ${DEEP_ACCENT}40` }}>
         <p className="text-[11px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: DEEP_ACCENT }}>Executive Summary</p>
         <p className="text-[14px] text-[var(--text-primary)] leading-relaxed font-medium">{deep.executiveSummary}</p>
         {deep.situationAssessment && (
@@ -681,7 +706,7 @@ function DeepResearchSection({
           </div>
         </Panel>
 
-        <Panel title="30-day scenarios" icon={<GitBranch size={14} />} accent="#06B6D4">
+        <Panel title="30-day scenarios" icon={<GitBranch size={14} />} accent="#C76A2E">
           <div className="flex flex-col gap-3">
             {deep.scenarios.length === 0 && <Empty text="No scenarios modelled." />}
             {deep.scenarios.length > 0 && (
@@ -841,7 +866,7 @@ function DeepResearchSection({
       {/* bottom line */}
       {deep.bottomLine && (
         <div className="rounded-[16px] p-5 mb-2 flex items-start gap-3"
-          style={{ background: 'linear-gradient(135deg, rgba(224,123,57,0.12), rgba(139,92,246,0.06))', border: '1px solid var(--accent-border)' }}>
+          style={{ background: 'linear-gradient(135deg, rgba(224,123,57,0.12), rgba(199,106,46,0.05))', border: '1px solid var(--accent-border)' }}>
           <span className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
             <Zap size={16} />
           </span>
