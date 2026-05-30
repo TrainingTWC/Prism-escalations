@@ -317,22 +317,39 @@ export async function requestAiInsights(snapshot: AnalyticsSnapshot): Promise<Ai
   }
 }
 
-// ─── Deep Research — async job + polling with cross-navigation persistence ──────
-// The Edge Function creates a `deep_research_jobs` row, runs the model in a
-// background task, and writes the result back. The client kicks off the job then
-// polls until completion. The jobId is stored in localStorage so polling survives
-// page navigation — if the user leaves and returns, polling resumes automatically.
+// ─── Deep Research — async job + polling, survives navigation ───────────────────
+// Architecture:
+//   1. Module-level singleton (_activePromise) survives Next.js client-side
+//      navigation — the polling loop never dies when the user switches pages.
+//   2. Result is cached in localStorage so if the job completes while the user
+//      is on another page, it appears immediately on return.
+//   3. On page mount: check cached result → attach to active promise → poll saved jobId.
 
-const DEEP_JOB_KEY = 'prism:deepJobId'
+const DEEP_JOB_KEY    = 'prism:deepJobId'
+const DEEP_RESULT_KEY = 'prism:deepResult'
 
-function saveDeepJobId(id: string) {
-  try { localStorage.setItem(DEEP_JOB_KEY, id) } catch { /* SSR / private-mode */ }
-}
-function clearDeepJobId() {
-  try { localStorage.removeItem(DEEP_JOB_KEY) } catch { /* SSR */ }
-}
+function saveDeepJobId(id: string)   { try { localStorage.setItem(DEEP_JOB_KEY,    id)                  } catch { /* SSR */ } }
+function clearDeepJobId()            { try { localStorage.removeItem(DEEP_JOB_KEY)                       } catch { /* SSR */ } }
+function saveDeepResult(r: AiDeepReport) { try { localStorage.setItem(DEEP_RESULT_KEY, JSON.stringify(r)) } catch { /* SSR */ } }
+function clearDeepResult()           { try { localStorage.removeItem(DEEP_RESULT_KEY)                    } catch { /* SSR */ } }
+
 export function getSavedDeepJobId(): string | null {
   try { return localStorage.getItem(DEEP_JOB_KEY) } catch { return null }
+}
+export function getSavedDeepResult(): AiDeepReport | null {
+  try {
+    const raw = localStorage.getItem(DEEP_RESULT_KEY)
+    return raw ? (JSON.parse(raw) as AiDeepReport) : null
+  } catch { return null }
+}
+export function clearDeepResearchCache() { clearDeepJobId(); clearDeepResult() }
+
+// Module-level singleton — persists across Next.js client-side route changes.
+let _activeJobId: string | null = null
+let _activePromise: Promise<AiDeepReport> | null = null
+
+export function getActiveDeepResearch(): { jobId: string | null; promise: Promise<AiDeepReport> | null } {
+  return { jobId: _activeJobId, promise: _activePromise }
 }
 
 function normalizeSteps(steps: unknown): string[] {
@@ -366,11 +383,12 @@ function normalizeDeepReport(report: Partial<AiDeepReport>): AiDeepReport {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-// Poll an existing jobId until it completes, errors, or the 10-minute ceiling hits.
+// Poll a job until complete / error / 10-minute ceiling.
+// Caches the result in localStorage so it survives page navigation.
 export async function pollDeepJob(jobId: string): Promise<AiDeepReport> {
-  const POLL_MS = 3000
-  const TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes — generous ceiling
-  const started = Date.now()
+  const POLL_MS    = 3_000
+  const TIMEOUT_MS = 10 * 60 * 1_000
+  const started    = Date.now()
 
   while (Date.now() - started < TIMEOUT_MS) {
     await sleep(POLL_MS)
@@ -378,11 +396,13 @@ export async function pollDeepJob(jobId: string): Promise<AiDeepReport> {
       body: { mode: 'job', jobId },
     })
 
-    if (pollErr) continue // transient error — keep polling
+    if (pollErr) continue // transient — keep polling
     const status = (job as { status?: string })?.status
     if (status === 'complete' && (job as { report?: unknown }).report) {
       clearDeepJobId()
-      return normalizeDeepReport((job as { report: Partial<AiDeepReport> }).report)
+      const result = normalizeDeepReport((job as { report: Partial<AiDeepReport> }).report)
+      saveDeepResult(result) // cache so return-after-completion shows instantly
+      return result
     }
     if (status === 'error') {
       clearDeepJobId()
@@ -399,7 +419,9 @@ export async function requestDeepResearch(
   baseReport: AiInsightReport | null,
   evidence: EvidenceTicket[] | null = null,
 ): Promise<AiDeepReport> {
-  // 1. Kick off the async job — the function returns a jobId immediately (202).
+  // Clear any previous cached result so the new run starts clean.
+  clearDeepResult()
+
   const { data, error } = await supabase.functions.invoke('ai-insights', {
     body: { snapshot, mode: 'deep', baseReport, evidence },
   })
@@ -407,9 +429,14 @@ export async function requestDeepResearch(
   const jobId = (data as { jobId?: string })?.jobId
   if (!jobId) throw new Error('Deep research did not return a job id')
 
-  // Persist jobId so navigation away and back can resume polling.
   saveDeepJobId(jobId)
+  _activeJobId = jobId
 
-  // 2. Poll until done.
-  return pollDeepJob(jobId)
+  // Store the promise at module level so navigating away and back can attach
+  // to the same running promise without starting a second polling loop.
+  _activePromise = pollDeepJob(jobId).finally(() => {
+    if (_activeJobId === jobId) { _activeJobId = null; _activePromise = null }
+  })
+
+  return _activePromise
 }

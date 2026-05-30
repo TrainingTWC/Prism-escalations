@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import {
   fetchAnalyticsSnapshot, fetchEvidenceSample, requestAiInsights, requestDeepResearch,
-  getSavedDeepJobId, pollDeepJob,
+  getActiveDeepResearch, getSavedDeepResult, getSavedDeepJobId, pollDeepJob, clearDeepResearchCache,
   type AnalyticsSnapshot, type AiInsightReport, type AiDeepReport, type EvidenceTicket,
 } from '@/lib/intelligence/analytics-ai'
 
@@ -164,6 +164,7 @@ export default function IntelligencePage() {
 
   const runDeepResearch = async () => {
     if (!snapshot) return
+    clearDeepResearchCache()  // discard any previous cached result
     setDeepLoading(true)
     setDeepError(null)
     setDeep(null)
@@ -185,18 +186,38 @@ export default function IntelligencePage() {
     return () => clearInterval(id)
   }, [deepLoading])
 
-  // On mount: resume any deep research job that was started before navigation away.
+  // On mount: restore deep research state across client-side navigation.
+  // Priority: 1) cached result (job finished while away) → show instantly
+  //           2) active module promise (still polling, just navigated away) → attach
+  //           3) saved jobId in localStorage (page was hard-refreshed) → resume poll
   useEffect(() => {
+    // 1. Already have a completed result cached from this session.
+    const cached = getSavedDeepResult()
+    if (cached) {
+      setDeep(cached)
+      return
+    }
+    // 2. Polling is still live in the module (client-side navigation).
+    const { promise } = getActiveDeepResearch()
+    if (promise) {
+      setDeepLoading(true)
+      setDeepError(null)
+      promise
+        .then((result) => setDeep(result))
+        .catch((err) => setDeepError(err instanceof Error ? err.message : 'Deep research failed'))
+        .finally(() => setDeepLoading(false))
+      return
+    }
+    // 3. Page was hard-refreshed — jobId is in localStorage, restart polling.
     const savedJobId = getSavedDeepJobId()
-    if (!savedJobId) return
-    setDeepLoading(true)
-    setDeepError(null)
-    setDeep(null)
-    setDeepElapsed(0)
-    pollDeepJob(savedJobId)
-      .then((result) => setDeep(result))
-      .catch((err) => setDeepError(err instanceof Error ? err.message : 'Deep research failed'))
-      .finally(() => setDeepLoading(false))
+    if (savedJobId) {
+      setDeepLoading(true)
+      setDeepError(null)
+      pollDeepJob(savedJobId)
+        .then((result) => setDeep(result))
+        .catch((err) => setDeepError(err instanceof Error ? err.message : 'Deep research failed'))
+        .finally(() => setDeepLoading(false))
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
