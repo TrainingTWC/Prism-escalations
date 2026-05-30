@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Prism Escalations — Audit → Ticket Algorithm</title>
+<style>
+  :root {
+    --bg: #07080c;
+    --bg-2: #0c0e15;
+    --panel: rgba(20, 23, 33, 0.72);
+    --panel-solid: #11131c;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-2: rgba(255, 255, 255, 0.14);
+    --ink: #eef1f7;
+    --muted: #9aa3b5;
+    --faint: #6b7384;
+    --accent: #6e8bff;
+    --accent-2: #8b5cf6;
+    --critical: #ff5470;
+    --high: #ff9f43;
+    --medium: #ffd34e;
+    --low: #4ec9a8;
+    --merge: #5ad1ff;
+    --radius: 16px;
+    --shadow: 0 20px 60px rgba(0,0,0,0.55);
+    font-synthesis: none;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 700px at 15% -10%, rgba(110,139,255,0.12), transparent 60%),
+      radial-gradient(1000px 600px at 100% 0%, rgba(139,92,246,0.10), transparent 55%),
+      var(--bg);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 22px; }
+  a { color: var(--accent); text-decoration: none; }
+
+  /* ── header ── */
+  header.hero {
+    padding: 70px 0 40px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 999px;
+    border: 1px solid var(--border-2);
+    background: rgba(110,139,255,0.10);
+    font-size: 12.5px; letter-spacing: 0.04em; text-transform: uppercase;
+    color: #c6d0ff; font-weight: 600;
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--low); box-shadow: 0 0 12px var(--low); }
+  h1 {
+    font-size: clamp(30px, 5vw, 52px); line-height: 1.05; margin: 18px 0 14px;
+    letter-spacing: -0.02em; font-weight: 800;
+    background: linear-gradient(120deg, #fff 20%, #b9c2ff 70%, #d8c6ff);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { color: var(--muted); font-size: 17.5px; max-width: 680px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+  .chip {
+    font-size: 12.5px; color: var(--muted); padding: 7px 12px; border-radius: 10px;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.02);
+  }
+  .chip b { color: var(--ink); font-weight: 600; }
+
+  /* ── sticky nav ── */
+  nav.toc {
+    position: sticky; top: 0; z-index: 40;
+    backdrop-filter: blur(14px);
+    background: rgba(7,8,12,0.78);
+    border-bottom: 1px solid var(--border);
+  }
+  nav.toc .wrap { display: flex; gap: 4px; overflow-x: auto; padding-top: 10px; padding-bottom: 10px; }
+  nav.toc a {
+    white-space: nowrap; color: var(--muted); font-size: 13.5px; font-weight: 600;
+    padding: 8px 13px; border-radius: 9px;
+  }
+  nav.toc a:hover { color: var(--ink); background: rgba(255,255,255,0.05); }
+
+  section { padding: 56px 0; border-bottom: 1px solid var(--border); }
+  .eyebrow { color: var(--accent); font-weight: 700; font-size: 13px; letter-spacing: 0.10em; text-transform: uppercase; }
+  h2 { font-size: clamp(24px, 3.4vw, 34px); margin: 10px 0 8px; letter-spacing: -0.01em; font-weight: 750; }
+  .lead { color: var(--muted); font-size: 16.5px; max-width: 760px; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow);
+    backdrop-filter: blur(8px);
+  }
+
+  /* ── tier cards ── */
+  .grid { display: grid; gap: 16px; }
+  .grid.tiers { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 26px; }
+  .tier {
+    border-radius: 14px; padding: 18px; border: 1px solid var(--border);
+    background: var(--panel-solid); position: relative; overflow: hidden;
+  }
+  .tier::before { content:""; position:absolute; inset:0 auto 0 0; width: 4px; }
+  .tier.critical::before { background: var(--critical); }
+  .tier.high::before { background: var(--high); }
+  .tier.medium::before { background: var(--medium); }
+  .tier.low::before { background: var(--low); }
+  .tier h3 { margin: 0 0 4px; font-size: 16px; display:flex; align-items:center; gap:8px; }
+  .tier .tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 8px; border-radius: 6px; }
+  .tag.critical { color: var(--critical); background: rgba(255,84,112,0.13); }
+  .tag.high { color: var(--high); background: rgba(255,159,67,0.13); }
+  .tag.medium { color: var(--medium); background: rgba(255,211,78,0.13); }
+  .tag.low { color: var(--low); background: rgba(78,201,168,0.13); }
+  .tier p { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; }
+  .tier .outcome { margin-top: 12px; font-size: 13px; color: var(--ink); font-weight: 600; }
+
+  /* ── flow ── */
+  .flow { display: grid; gap: 14px; margin-top: 26px; }
+  .flow-row { display: flex; align-items: stretch; gap: 14px; flex-wrap: wrap; }
+  .node {
+    flex: 1; min-width: 180px; border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; background: var(--panel-solid);
+  }
+  .node .n-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); font-weight: 700; }
+  .node .n-title { font-weight: 650; margin-top: 4px; }
+  .node .n-desc { color: var(--muted); font-size: 13px; margin-top: 5px; }
+  .node.decision { border-color: rgba(110,139,255,0.4); background: rgba(110,139,255,0.06); }
+  .node.merge { border-color: rgba(90,209,255,0.4); background: rgba(90,209,255,0.06); }
+  .arrow { display:flex; align-items:center; justify-content:center; color: var(--faint); font-size: 22px; }
+
+  /* ── simulator ── */
+  .sim { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px; }
+  @media (max-width: 900px) { .sim { grid-template-columns: 1fr; } }
+  .sim-head { display:flex; align-items:center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .sim-head h3 { margin:0; font-size: 16px; }
+  .audit-store { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); font-weight: 700; }
+  input[type=text], select {
+    background: var(--bg-2); border: 1px solid var(--border-2); color: var(--ink);
+    border-radius: 9px; padding: 8px 10px; font-size: 13.5px; font-family: inherit; outline: none;
+  }
+  input[type=text]:focus, select:focus { border-color: var(--accent); }
+
+  .section-row {
+    display: grid; grid-template-columns: 1.4fr 0.9fr 90px 70px auto; gap: 8px; align-items: center;
+    padding: 10px; border: 1px solid var(--border); border-radius: 11px; background: var(--panel-solid); margin-bottom: 9px;
+  }
+  @media (max-width: 560px){ .section-row { grid-template-columns: 1fr 1fr; } }
+  .section-row .mini { font-size: 11px; color: var(--faint); }
+  .range-wrap { display:flex; flex-direction: column; gap: 3px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .rng-val { font-size: 11px; color: var(--muted); text-align: center; }
+  .toggle {
+    display:flex; align-items:center; gap:6px; font-size: 11.5px; color: var(--muted); cursor: pointer; user-select:none;
+  }
+  .toggle input { accent-color: var(--low); width: 15px; height: 15px; }
+  .del-btn {
+    background: rgba(255,84,112,0.1); border: 1px solid rgba(255,84,112,0.3); color: var(--critical);
+    border-radius: 8px; width: 28px; height: 28px; cursor: pointer; font-size: 15px; line-height: 1;
+  }
+  .btn {
+    border: 1px solid var(--border-2); background: rgba(255,255,255,0.04); color: var(--ink);
+    border-radius: 10px; padding: 9px 15px; font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .btn:hover { background: rgba(255,255,255,0.08); }
+  .btn.primary { background: linear-gradient(120deg, var(--accent), var(--accent-2)); border: none; color: #fff; box-shadow: 0 8px 22px rgba(110,139,255,0.3); }
+  .btn.ghost { background: transparent; }
+  .btn-row { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+
+  /* output tickets */
+  .out-empty { color: var(--faint); font-size: 14px; text-align: center; padding: 30px 10px; border: 1px dashed var(--border-2); border-radius: 12px; }
+  .ticket {
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 12px;
+    background: var(--panel-solid); position: relative; overflow: hidden;
+    animation: pop .35s ease;
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.98);} to {opacity:1; transform:none;} }
+  .ticket::before { content:""; position:absolute; inset: 0 auto 0 0; width: 4px; }
+  .ticket.critical::before { background: var(--critical); }
+  .ticket.high::before { background: var(--high); }
+  .ticket.medium::before { background: var(--medium); }
+  .ticket.low::before { background: var(--low); }
+  .ticket .t-top { display:flex; align-items:center; justify-content: space-between; gap: 8px; }
+  .ticket .t-code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--muted); }
+  .ticket .t-title { font-weight: 650; margin: 6px 0 2px; font-size: 14.5px; }
+  .ticket .t-meta { display:flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
+  .badge { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--border-2); color: var(--muted); }
+  .badge.merge { color: var(--merge); border-color: rgba(90,209,255,0.4); background: rgba(90,209,255,0.08); }
+  .badge.rollup { color: var(--accent-2); border-color: rgba(139,92,246,0.4); background: rgba(139,92,246,0.08); }
+  .badge.new { color: var(--low); border-color: rgba(78,201,168,0.4); background: rgba(78,201,168,0.08); }
+  .ticket .t-note { font-size: 12.5px; color: var(--muted); margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--border); }
+  .ticket .t-bundle { font-size: 12px; color: var(--faint); margin-top: 8px; }
+
+  .summary-strip { display:flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 18px; }
+  .stat { flex:1; min-width: 110px; border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; background: var(--panel-solid); }
+  .stat .v { font-size: 24px; font-weight: 800; }
+  .stat .k { font-size: 11.5px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat.created .v { color: var(--low); }
+  .stat.merged .v { color: var(--merge); }
+  .stat.skipped .v { color: var(--faint); }
+  .stat.sections .v { color: var(--ink); }
+
+  /* table */
+  table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 11px 13px; border-bottom: 1px solid var(--border); }
+  th { color: var(--faint); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+  td code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #c6d0ff; }
+
+  .callout { display:flex; gap: 12px; padding: 16px; border-radius: 12px; border: 1px solid var(--border-2); background: rgba(110,139,255,0.06); margin-top: 18px; }
+  .callout .ic { font-size: 18px; }
+  .callout p { margin: 0; color: var(--muted); font-size: 14px; }
+  .callout b { color: var(--ink); }
+
+  code.inline { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 6px; color: #c6d0ff; }
+
+  footer { padding: 40px 0 60px; color: var(--faint); font-size: 13px; }
+  .kbd { font-family: ui-monospace, monospace; font-size: 11px; border: 1px solid var(--border-2); border-bottom-width: 2px; border-radius: 6px; padding: 1px 6px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="pill"><span class="dot"></span> Edge Function · audit-ingest</span>
+    <h1>From Audit Findings<br/>to the Right Tickets</h1>
+    <p class="sub">A severity-tiered grouping algorithm that turns a raw Prism Intelligence audit submission into a clean, deduplicated set of tickets — without flooding the board.</p>
+    <div class="meta-row">
+      <span class="chip"><b>Input</b> &nbsp;Audit webhook payload</span>
+      <span class="chip"><b>Output</b> &nbsp;Tickets (created + merged)</span>
+      <span class="chip"><b>Runtime</b> &nbsp;Supabase Edge Function (Deno)</span>
+      <span class="chip"><b>Auth</b> &nbsp;Shared-secret webhook</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#problem">The Problem</a>
+    <a href="#tiers">Severity Tiers</a>
+    <a href="#flow">The Flow</a>
+    <a href="#sim">Live Simulator</a>
+    <a href="#merge">Cross-Audit Merge</a>
+    <a href="#reference">Reference</a>
+  </div>
+</nav>
+
+<!-- PROBLEM -->
+<section id="problem">
+  <div class="wrap">
+    <span class="eyebrow">Why this exists</span>
+    <h2>Not every finding deserves a ticket</h2>
+    <p class="lead">A single audit can fail dozens of checkpoints across many sections. The naïve approach — one ticket per failed section, or worse, per checkpoint — buries the real escalations under noise. This algorithm separates <b>signal</b> from <b>housekeeping</b>.</p>
+
+    <div class="grid" style="grid-template-columns: 1fr 1fr; margin-top: 24px;">
+      <div class="panel">
+        <h3 style="margin:0 0 6px; color: var(--critical);">✗ The old way</h3>
+        <p style="color:var(--muted); font-size:14px; margin:0;">One ticket per failed section. A 70%-passing audit could still spawn 8–12 tickets — most of them low-priority paperwork that drown out the one critical safety issue.</p>
+      </div>
+      <div class="panel" style="border-color: rgba(78,201,168,0.35);">
+        <h3 style="margin:0 0 6px; color: var(--low);">✓ The new way</h3>
+        <p style="color:var(--muted); font-size:14px; margin:0;">Critical & high findings get dedicated tickets. Everything minor collapses into a single roll-up. Recurrences merge into the existing open ticket. Same audit → 1–3 focused tickets.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TIERS -->
+<section id="tiers">
+  <div class="wrap">
+    <span class="eyebrow">Step 1 · Classify</span>
+    <h2>Severity decides the shape</h2>
+    <p class="lead">For each failed section, severity comes from the AI analysis (<code class="inline">ai.severity</code>) or is computed from the deduction percentage. That severity determines whether the section becomes its own ticket or gets bundled.</p>
+
+    <div class="grid tiers">
+      <div class="tier critical">
+        <h3>Critical <span class="tag critical">own ticket</span></h3>
+        <p>Marked critical, or a critical checkpoint failed.</p>
+        <div class="outcome">→ 1 dedicated ticket · SLA 30 min</div>
+      </div>
+      <div class="tier high">
+        <h3>High <span class="tag high">own ticket</span></h3>
+        <p>Deduction ≥ 60% of the section's score.</p>
+        <div class="outcome">→ 1 dedicated ticket · SLA 2 hrs</div>
+      </div>
+      <div class="tier medium">
+        <h3>Medium <span class="tag medium">roll-up</span></h3>
+        <p>Deduction ≥ 30%.</p>
+        <div class="outcome">→ bundled into roll-up · SLA 24 hrs</div>
+      </div>
+      <div class="tier low">
+        <h3>Low <span class="tag low">roll-up</span></h3>
+        <p>Minor deduction below 30%.</p>
+        <div class="outcome">→ bundled into roll-up · SLA 72 hrs</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="ic">🤖</span>
+      <p>If the AI sets <code class="inline">shouldCreateTicket: false</code> on a section, it is <b>skipped entirely</b> — the algorithm respects the model's judgement that the finding doesn't warrant a ticket.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FLOW -->
+<section id="flow">
+  <div class="wrap">
+    <span class="eyebrow">Step 2 · Group</span>
+    <h2>How a payload becomes tickets</h2>
+    <p class="lead">Each section flows through the same gate. Critical/high branch off as individual tickets; medium/low pool together into exactly one roll-up per audit (severity capped at medium so it never outranks a real escalation).</p>
+
+    <div class="flow">
+      <div class="flow-row">
+        <div class="node"><div class="n-label">Input</div><div class="n-title">Failed section</div><div class="n-desc">title · department · deduction% · AI verdict</div></div>
+        <div class="arrow">→</div>
+        <div class="node decision"><div class="n-label">Gate</div><div class="n-title">shouldCreateTicket?</div><div class="n-desc">false → skip the section</div></div>
+        <div class="arrow">→</div>
+        <div class="node decision"><div class="n-label">Decision</div><div class="n-title">Severity?</div><div class="n-desc">resolve from AI or deduction%</div></div>
+      </div>
+      <div class="flow-row">
+        <div class="node" style="border-color: rgba(255,84,112,0.35)"><div class="n-label">critical / high</div><div class="n-title">Individual ticket</div><div class="n-desc">key = store · category · sectionId</div></div>
+        <div class="node" style="border-color: rgba(255,211,78,0.35)"><div class="n-label">medium / low</div><div class="n-title">Roll-up candidate</div><div class="n-desc">key = store · program · <code class="inline">__rollup__</code></div></div>
+      </div>
+      <div class="flow-row">
+        <div class="node merge" style="flex:1"><div class="n-label">Step 3 · Dedup</div><div class="n-title">Open ticket for this store + key?</div><div class="n-desc"><b>Yes →</b> merge (escalate, append, reopen++) &nbsp;·&nbsp; <b>No →</b> create new <code class="inline">AUD-…</code></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SIMULATOR -->
+<section id="sim">
+  <div class="wrap">
+    <span class="eyebrow">Try it · interactive</span>
+    <h2>Live algorithm simulator</h2>
+    <p class="lead">Build an audit payload below — adjust each section's department, deduction, and AI verdict — then run the algorithm and watch the exact tickets it would generate. Toggle <b>"Pretend an open ticket exists"</b> to see cross-audit merging in action.</p>
+
+    <div class="sim">
+      <!-- LEFT: input -->
+      <div class="panel">
+        <div class="sim-head">
+          <h3>📋 Audit submission</h3>
+          <span class="mini" style="color:var(--faint);font-size:12px;">edit sections ↓</span>
+        </div>
+        <div class="audit-store">
+          <div class="field" style="flex:1;">
+            <label>Store</label>
+            <input type="text" id="storeName" value="Indiranagar Flagship" />
+          </div>
+          <div class="field" style="flex:1;">
+            <label>Audit program</label>
+            <input type="text" id="programName" value="Monthly Ops & Hygiene" />
+          </div>
+        </div>
+
+        <div id="sectionsList"></div>
+
+        <div class="btn-row">
+          <button class="btn ghost" id="addSection">＋ Add section</button>
+          <button class="btn ghost" id="loadExample">↻ Load example</button>
+        </div>
+
+        <label class="toggle" style="margin-top:16px;">
+          <input type="checkbox" id="simulateOpen" />
+          Pretend a matching open ticket already exists (demo merge)
+        </label>
+
+        <div class="btn-row" style="margin-top:14px;">
+          <button class="btn primary" id="runBtn">▶ Run algorithm</button>
+        </div>
+      </div>
+
+      <!-- RIGHT: output -->
+      <div class="panel">
+        <div class="sim-head">
+          <h3>🎟️ Generated tickets</h3>
+        </div>
+        <div class="summary-strip" id="summary" style="display:none;">
+          <div class="stat sections"><div class="v" id="s-sections">0</div><div class="k">Sections</div></div>
+          <div class="stat created"><div class="v" id="s-created">0</div><div class="k">Created</div></div>
+          <div class="stat merged"><div class="v" id="s-merged">0</div><div class="k">Merged</div></div>
+          <div class="stat skipped"><div class="v" id="s-skipped">0</div><div class="k">Skipped</div></div>
+        </div>
+        <div id="output">
+          <div class="out-empty">Run the algorithm to see the resulting tickets.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MERGE -->
+<section id="merge">
+  <div class="wrap">
+    <span class="eyebrow">Step 3 · Deduplicate</span>
+    <h2>Recurrence merges, it doesn't duplicate</h2>
+    <p class="lead">When the same issue reappears at the same store and an <b>open</b> ticket already exists (status not <code class="inline">resolved</code> / <code class="inline">closed</code>), the algorithm updates that ticket instead of creating a twin.</p>
+
+    <table>
+      <thead><tr><th>On merge</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td><b>Severity</b></td><td>Escalated to the higher of the two (max rank)</td></tr>
+        <tr><td><b>Recurrence note</b></td><td>Appended to the description with timestamp + submission ref</td></tr>
+        <tr><td><b>Deductions</b></td><td>New section deductions appended to the JSON history</td></tr>
+        <tr><td><b><code>reopen_count</code></b></td><td>Incremented by 1</td></tr>
+        <tr><td><b>Pattern flag</b></td><td>Raised — marks it as a recurring problem</td></tr>
+        <tr><td><b>SLA deadline</b></td><td>Clock restarts <em>only</em> if severity escalated</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <span class="ic">🔑</span>
+      <p><b>Match keys:</b> individual tickets match on <code class="inline">store_code + section_id</code>; roll-ups match on <code class="inline">store_code + program_id</code> (their section id is the shared sentinel <code class="inline">__rollup__</code>).</p>
+    </div>
+  </div>
+</section>
+
+<!-- REFERENCE -->
+<section id="reference">
+  <div class="wrap">
+    <span class="eyebrow">Reference</span>
+    <h2>SLA & severity rules</h2>
+    <div class="grid" style="grid-template-columns: 1fr 1fr; gap:20px; margin-top: 20px;">
+      <div class="panel">
+        <h3 style="margin:0 0 4px;">computeSeverity()</h3>
+        <table style="margin-top:8px;">
+          <tbody>
+            <tr><td>Critical checkpoint failed</td><td><span class="badge" style="color:var(--critical)">critical</span></td></tr>
+            <tr><td>Deduction ≥ 60%</td><td><span class="badge" style="color:var(--high)">high</span></td></tr>
+            <tr><td>Deduction ≥ 30%</td><td><span class="badge" style="color:var(--medium)">medium</span></td></tr>
+            <tr><td>Otherwise</td><td><span class="badge" style="color:var(--low)">low</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel">
+        <h3 style="margin:0 0 4px;">SLA window</h3>
+        <table style="margin-top:8px;">
+          <tbody>
+            <tr><td><span class="badge" style="color:var(--critical)">critical</span></td><td>30 minutes</td></tr>
+            <tr><td><span class="badge" style="color:var(--high)">high</span></td><td>2 hours</td></tr>
+            <tr><td><span class="badge" style="color:var(--medium)">medium</span></td><td>24 hours</td></tr>
+            <tr><td><span class="badge" style="color:var(--low)">low</span></td><td>72 hours</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:24px;">
+      <span class="ic">🔌</span>
+      <p><b>Endpoint:</b> <code class="inline">POST /functions/v1/audit-ingest</code> with header <code class="inline">x-webhook-secret</code>. Returns <code class="inline">{ ticketsCreated, ticketsMerged, created[], merged[], errors[] }</code>.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Prism Escalations · audit-ingest algorithm explainer · interactive document.<br/>
+    Tip: tweak the sliders, flip the AI toggle, and re-run to see how grouping shifts. <span class="kbd">▶ Run</span>
+  </div>
+</footer>
+
+<script>
+// ───────────────────────── algorithm (mirrors the Edge Function) ─────────────
+const SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1 };
+const RANK_SEV = { 4: "critical", 3: "high", 2: "medium", 1: "low" };
+const SLA = { critical: "30 min", high: "2 hrs", medium: "24 hrs", low: "72 hrs" };
+const ROLLUP_KEY = "__rollup__";
+
+const DEPT_TO_CAT = {
+  Operations: "Operations", HR: "HR", IT: "IT", SCM: "SCM", QA: "QA",
+};
+
+function computeSeverity(s) {
+  if (s.isCritical) return "critical";
+  if (s.deductionPct >= 60) return "high";
+  if (s.deductionPct >= 30) return "medium";
+  return "low";
+}
+
+function buildSpecs(audit) {
+  const specs = [];
+  const rollup = [];
+  let skipped = 0;
+
+  for (const s of audit.sections) {
+    if (s.shouldCreateTicket === false) { skipped++; continue; }
+    const severity = s.severity || computeSeverity(s);
+    const category = DEPT_TO_CAT[s.department] || "Operations";
+    if (severity === "critical" || severity === "high") {
+      specs.push({
+        kind: "individual",
+        sectionKey: s.id,
+        category, severity,
+        title: `${s.title} — ${audit.storeName}`,
+        bundle: null,
+      });
+    } else {
+      rollup.push({ ...s, _severity: severity, _category: category });
+    }
+  }
+
+  if (rollup.length) {
+    const maxRank = Math.min(2, Math.max(...rollup.map(s => SEV_RANK[s._severity])));
+    const byCat = {};
+    rollup.forEach(s => { byCat[s._category] = (byCat[s._category]||0) + (s.deductionPct||0); });
+    const category = Object.entries(byCat).sort((a,b)=>b[1]-a[1])[0][0];
+    specs.push({
+      kind: "rollup",
+      sectionKey: ROLLUP_KEY,
+      category,
+      severity: RANK_SEV[maxRank] || "low",
+      title: `Audit follow-up — ${audit.programName} (${audit.storeName})`,
+      bundle: rollup.map(s => `${s.title} · ${s._severity} · ${s.deductionPct}%`),
+    });
+  }
+  return { specs, skipped };
+}
+
+// ───────────────────────── UI state ─────────────────────────
+let SID = 0;
+const EXAMPLE = () => ([
+  { title: "Food Safety — cold storage temps", department: "QA", deductionPct: 85, isCritical: true,  shouldCreateTicket: true },
+  { title: "POS terminal offline at counter 3",  department: "IT", deductionPct: 64, isCritical: false, shouldCreateTicket: true },
+  { title: "Staff grooming standards",            department: "HR", deductionPct: 38, isCritical: false, shouldCreateTicket: true },
+  { title: "Back-of-house cleaning checklist",    department: "Operations", deductionPct: 22, isCritical: false, shouldCreateTicket: true },
+  { title: "Promo signage placement",             department: "Operations", deductionPct: 12, isCritical: false, shouldCreateTicket: false },
+]);
+
+let sections = [];
+
+const listEl = document.getElementById("sectionsList");
+
+function makeSection(data) {
+  return { id: "sec-" + (SID++), title: data.title, department: data.department,
+           deductionPct: data.deductionPct, isCritical: data.isCritical, shouldCreateTicket: data.shouldCreateTicket };
+}
+
+function render() {
+  listEl.innerHTML = "";
+  sections.forEach((s) => {
+    const row = document.createElement("div");
+    row.className = "section-row";
+    row.innerHTML = `
+      <div class="field" style="gap:3px;">
+        <input type="text" value="${escapeHtml(s.title)}" data-id="${s.id}" data-k="title" />
+        <span class="mini">${s.isCritical ? "⚠️ critical checkpoint" : "&nbsp;"}</span>
+      </div>
+      <select data-id="${s.id}" data-k="department">
+        ${["Operations","HR","IT","SCM","QA"].map(d=>`<option ${d===s.department?"selected":""}>${d}</option>`).join("")}
+      </select>
+      <div class="range-wrap">
+        <input type="range" min="0" max="100" value="${s.deductionPct}" data-id="${s.id}" data-k="deductionPct" />
+        <span class="rng-val">${s.deductionPct}% · <b style="color:var(--${computeSeverity(s)})">${computeSeverity(s)}</b></span>
+      </div>
+      <label class="toggle" title="Critical checkpoint?"><input type="checkbox" data-id="${s.id}" data-k="isCritical" ${s.isCritical?"checked":""}/> crit</label>
+      <button class="del-btn" data-del="${s.id}" title="Remove">×</button>
+      <label class="toggle" style="grid-column:1/-1; margin-top:-2px;"><input type="checkbox" data-id="${s.id}" data-k="shouldCreateTicket" ${s.shouldCreateTicket?"checked":""}/> AI: worth a ticket</label>
+    `;
+    listEl.appendChild(row);
+  });
+}
+
+function escapeHtml(t){ return (t||"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+
+listEl.addEventListener("input", (e) => {
+  const id = e.target.dataset.id, k = e.target.dataset.k;
+  if (!id) return;
+  const s = sections.find(x=>x.id===id); if (!s) return;
+  if (e.target.type === "checkbox") s[k] = e.target.checked;
+  else if (k === "deductionPct") s[k] = +e.target.value;
+  else s[k] = e.target.value;
+  if (k === "deductionPct" || k === "isCritical") render();
+});
+listEl.addEventListener("click", (e) => {
+  const del = e.target.dataset.del;
+  if (del) { sections = sections.filter(s=>s.id!==del); render(); }
+});
+
+document.getElementById("addSection").onclick = () => {
+  sections.push(makeSection({ title: "New finding", department: "Operations", deductionPct: 25, isCritical: false, shouldCreateTicket: true }));
+  render();
+};
+document.getElementById("loadExample").onclick = () => {
+  sections = EXAMPLE().map(makeSection); render();
+};
+
+// ───────────────────────── run + output ─────────────────────────
+document.getElementById("runBtn").onclick = () => {
+  const audit = {
+    storeName: document.getElementById("storeName").value || "Store",
+    programName: document.getElementById("programName").value || "Audit",
+    sections,
+  };
+  const { specs, skipped } = buildSpecs(audit);
+  const simulateOpen = document.getElementById("simulateOpen").checked;
+
+  const out = document.getElementById("output");
+  out.innerHTML = "";
+
+  let created = 0, merged = 0, codeN = 0;
+
+  if (!specs.length) {
+    out.innerHTML = `<div class="out-empty">No tickets generated — every section was either passing, skipped by the AI, or empty.</div>`;
+  }
+
+  specs.forEach((spec) => {
+    const isMerge = simulateOpen; // demo: assume each spec finds an open match
+    if (isMerge) merged++; else created++;
+    const code = isMerge ? "AUD-7Q2K-EXISTING" : `AUD-${Date.now().toString(36).toUpperCase()}-${codeN++}`;
+
+    const el = document.createElement("div");
+    el.className = `ticket ${spec.severity}`;
+    el.innerHTML = `
+      <div class="t-top">
+        <span class="t-code">${code}</span>
+        <span class="badge ${isMerge?"merge":"new"}">${isMerge?"🔁 merged":"✨ new"}</span>
+      </div>
+      <div class="t-title">${escapeHtml(spec.title)}</div>
+      <div class="t-meta">
+        <span class="badge" style="color:var(--${spec.severity})">${spec.severity}</span>
+        <span class="badge">${spec.category}</span>
+        <span class="badge">SLA ${SLA[spec.severity]}</span>
+        ${spec.kind==="rollup"?`<span class="badge rollup">roll-up</span>`:`<span class="badge">individual</span>`}
+      </div>
+      ${spec.bundle ? `<div class="t-bundle">📦 Bundles ${spec.bundle.length} minor finding(s):<br/>${spec.bundle.map(b=>"• "+escapeHtml(b)).join("<br/>")}</div>` : ""}
+      ${isMerge ? `<div class="t-note">🔁 Recurrence appended · <b>reopen_count++</b> · pattern flag raised${spec.severity!=="low"?" · severity escalated":""}</div>` : ""}
+    `;
+    out.appendChild(el);
+  });
+
+  document.getElementById("summary").style.display = "flex";
+  document.getElementById("s-sections").textContent = sections.length;
+  document.getElementById("s-created").textContent = created;
+  document.getElementById("s-merged").textContent = merged;
+  document.getElementById("s-skipped").textContent = skipped;
+};
+
+// init
+sections = EXAMPLE().map(makeSection);
+render();
+document.getElementById("runBtn").click();
+</script>
+</body>
+</html>
