@@ -21,16 +21,16 @@ ALTER TABLE public.tickets
     'Finance', 'Maintenance', 'L&D'
   ));
 
--- ── 2. Severity: convert existing data, update default + constraint ────
+-- ── 2. Severity: drop old constraint FIRST, then convert data, then add new ──
 
--- Convert legacy values → P-notation
+ALTER TABLE public.tickets
+  DROP CONSTRAINT IF EXISTS tickets_severity_check;
+
+-- Convert legacy values → P-notation (safe now that the old CHECK is gone)
 UPDATE public.tickets SET severity = 'P0' WHERE severity = 'critical';
 UPDATE public.tickets SET severity = 'P1' WHERE severity = 'high';
 UPDATE public.tickets SET severity = 'P2' WHERE severity = 'medium';
 UPDATE public.tickets SET severity = 'P3' WHERE severity = 'low';
-
-ALTER TABLE public.tickets
-  DROP CONSTRAINT IF EXISTS tickets_severity_check;
 
 ALTER TABLE public.tickets
   ALTER COLUMN severity SET DEFAULT 'P2';

@@ -7,7 +7,7 @@
 // Two analysis modes:
 //   • mode: "fast" (default)  → meta/llama-3.3-70b-instruct  (~30-40s)
 //        The instant operational briefing rendered on page load.
-//   • mode: "deep"            → moonshotai/kimi-k2.6          (~1-2 min)
+//   • mode: "deep"            → nvidia/llama-3.1-nemotron-70b-instruct  (~30-60s)
 //        A user-triggered "Deep Research" dive that takes the fast report +
 //        the snapshot and produces a rigorous strategist-grade analysis:
 //        root-cause reasoning, strategic plays with step plans, scenario
@@ -17,7 +17,7 @@
 //   supabase functions deploy ai-insights
 //   supabase secrets set NVIDIA_API_KEY=nvapi-xxxxxxxx
 //   (optional) supabase secrets set NVIDIA_FAST_MODEL=meta/llama-3.3-70b-instruct
-//   (optional) supabase secrets set NVIDIA_DEEP_MODEL=google/gemma-4-31b-it
+//   (optional) supabase secrets set NVIDIA_DEEP_MODEL=nvidia/llama-3.1-nemotron-70b-instruct
 //
 // JWT verification is left ON (default) so only authenticated app users can call it.
 // ---------------------------------------------------------------------------
@@ -29,7 +29,7 @@ import { Redis } from "https://esm.sh/@upstash/redis@1.34.3";
 
 const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 const FAST_MODEL = "meta/llama-3.3-70b-instruct";
-const DEEP_MODEL = "google/gemma-4-31b-it";
+const DEEP_MODEL = "nvidia/llama-3.1-nemotron-70b-instruct";
 
 const ALLOWED_ORIGINS = [
   "https://escalations.prismintelligence.in",
@@ -486,7 +486,7 @@ Deno.serve(async (req: Request) => {
               { role: "system", content: systemPrompt },
               { role: "user", content: userPrompt },
             ],
-            max_tokens: 2000,
+            max_tokens: 4096,
             temperature: 0.3,
             top_p: 0.9,
             stream: false,
