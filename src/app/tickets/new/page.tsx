@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/auth.store'
 import { CATEGORIES, getSlaDeadline } from '@/lib/ticket-utils'
 import type { Store } from '@/lib/supabase/database.types'
+import { mapDepartment } from '@/lib/intelligence/department-map'
 import { ArrowLeft, Ticket, AlertCircle } from 'lucide-react'
 
 type Severity = 'critical' | 'high' | 'medium' | 'low'
@@ -25,6 +26,7 @@ export default function NewTicketPage() {
   const router = useRouter()
   const { profile } = useAuthStore()
   const [stores, setStores] = useState<Store[]>([])
+  const [employees, setEmployees] = useState<{ id: string; name: string; department: string | null; role: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -35,6 +37,7 @@ export default function NewTicketPage() {
     sub_category: '',
     severity: 'medium' as Severity,
     store_id: '',
+    assigned_to: '',
     source_type: 'store' as 'audit' | 'store' | 'am' | 'leadership',
   })
 
@@ -43,9 +46,22 @@ export default function NewTicketPage() {
       setStores(data || [])
       if (profile?.store_id) setForm((f) => ({ ...f, store_id: profile.store_id! }))
     })
+    supabase
+      .from('profiles')
+      .select('id, name, department, role')
+      .eq('status', 'active')
+      .order('name')
+      .then(({ data }) => setEmployees(data || []))
   }, [profile])
 
   const subcategories = CATEGORIES[form.category] || []
+
+  const filteredEmployees = employees.filter((emp) => {
+    if (!emp.department) return false
+    const mapped = mapDepartment(emp.department)
+    if (mapped === form.category) return true
+    return emp.department.toLowerCase().includes(form.category.toLowerCase())
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +73,12 @@ export default function NewTicketPage() {
     const sla_deadline = getSlaDeadline(form.severity, new Date().toISOString()).toISOString()
 
     const { error: insertError } = await supabase.from('tickets').insert({
-      ...form, ticket_code, sla_deadline, raised_by: profile.id, status: 'open',
+      ...form,
+      assigned_to: form.assigned_to || null,
+      ticket_code,
+      sla_deadline,
+      raised_by: profile.id,
+      status: 'open',
     } as never)
 
     if (insertError) {
@@ -124,6 +145,7 @@ export default function NewTicketPage() {
                       ...f,
                       category: e.target.value as keyof typeof CATEGORIES,
                       sub_category: '',
+                      assigned_to: '',
                     }))
                   }
                   required
@@ -190,6 +212,28 @@ export default function NewTicketPage() {
                   <option key={s.id} value={s.id}>{s.store_name} ({s.store_code})</option>
                 ))}
               </select>
+            </div>
+
+            {/* Assigned To */}
+            <div>
+              <label className={labelClass}>Assigned To</label>
+              <select
+                value={form.assigned_to}
+                onChange={(e) => setForm((f) => ({ ...f, assigned_to: e.target.value }))}
+                className="prism-input"
+              >
+                <option value="">Unassigned</option>
+                {filteredEmployees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name}
+                  </option>
+                ))}
+              </select>
+              {filteredEmployees.length === 0 && (
+                <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">
+                  No active {form.category} staff found
+                </p>
+              )}
             </div>
 
             {/* Description */}
