@@ -11,8 +11,10 @@ import { formatDistanceToNow } from 'date-fns'
 const ROLES = [
   { value: 'store_team',    label: 'Store Team',    color: 'var(--text-muted)' },
   { value: 'store_manager', label: 'Store Manager', color: 'var(--color-success)' },
+  { value: 'dept_owner',    label: 'Dept. Owner',   color: '#f59e0b' },
   { value: 'area_manager',  label: 'Area Manager',  color: '#60a5fa' },
-  { value: 'admin',         label: 'Admin',         color: 'var(--color-warning)' },
+  { value: 'auditor',       label: 'Auditor',       color: '#a78bfa' },
+  { value: 'leadership',    label: 'Leadership',    color: 'var(--color-warning)' },
   { value: 'super_admin',   label: 'Super Admin',   color: 'var(--accent)' },
 ]
 
@@ -28,6 +30,7 @@ interface ProfileRow {
   emp_id: string | null
   region: string | null
   department: string | null
+  store_id: string | null
   status: string
   created_at: string
 }
@@ -116,21 +119,101 @@ function RoleDropdown({
   )
 }
 
+const DEPARTMENTS = ['Operations', 'HR', 'IT', 'SCM', 'QA', 'Finance', 'Maintenance', 'L&D']
+
+/**
+ * Scope picker shown to super admins: which store / department / region the
+ * user's visibility is tied to, depending on their role. This is what the
+ * tickets RLS policies key off.
+ */
+function ScopeEditor({
+  p,
+  stores,
+  regions,
+  onUpdated,
+}: {
+  p: ProfileRow
+  stores: { id: string; store_name: string; store_code: string }[]
+  regions: string[]
+  onUpdated: (id: string, patch: Partial<ProfileRow>) => void
+}) {
+  const [saving, setSaving] = useState(false)
+
+  const save = async (patch: Partial<ProfileRow>) => {
+    setSaving(true)
+    await supabase.from('profiles').update(patch as never).eq('id', p.id)
+    onUpdated(p.id, patch)
+    setSaving(false)
+  }
+
+  const selectStyle = { fontSize: 11, padding: '4px 8px', width: 'auto', maxWidth: 180, opacity: saving ? 0.5 : 1 }
+
+  if (p.role === 'store_team' || p.role === 'store_manager') {
+    return (
+      <select
+        value={p.store_id ?? ''}
+        disabled={saving}
+        onChange={(e) => save({ store_id: e.target.value || null })}
+        className="prism-input"
+        style={selectStyle}
+      >
+        <option value="">No store ⚠</option>
+        {stores.map((s) => <option key={s.id} value={s.id}>{s.store_name}</option>)}
+      </select>
+    )
+  }
+  if (p.role === 'dept_owner') {
+    return (
+      <select
+        value={p.department ?? ''}
+        disabled={saving}
+        onChange={(e) => save({ department: e.target.value || null })}
+        className="prism-input"
+        style={selectStyle}
+      >
+        <option value="">No department ⚠</option>
+        {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+      </select>
+    )
+  }
+  if (p.role === 'area_manager') {
+    return (
+      <select
+        value={p.region ?? ''}
+        disabled={saving}
+        onChange={(e) => save({ region: e.target.value || null })}
+        className="prism-input"
+        style={selectStyle}
+      >
+        <option value="">No region ⚠</option>
+        {regions.map((r) => <option key={r} value={r}>{r}</option>)}
+      </select>
+    )
+  }
+  return null
+}
+
 export default function TeamPage() {
   const { profile: self } = useAuthStore()
   const isSuperAdmin = self?.role === 'super_admin'
 
   const [profiles, setProfiles] = useState<ProfileRow[]>([])
+  const [stores, setStores] = useState<{ id: string; store_name: string; store_code: string }[]>([])
+  const [regions, setRegions] = useState<string[]>([])
   const [roster, setRoster] = useState<RosterStats>({ total: 0, active: 0, lastSync: null })
   const [loading, setLoading] = useState(true)
 
   const fetchAll = useCallback(async () => {
-    const [{ data: profs }, { data: rosterData }] = await Promise.all([
+    const [{ data: profs }, { data: rosterData }, { data: storeRows }] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('employee_roster').select('is_active, last_synced_at').order('last_synced_at', { ascending: false }).limit(1),
+      supabase.from('stores').select('id, store_name, store_code, region').order('store_name'),
     ])
 
     setProfiles((profs as ProfileRow[]) || [])
+    const sRows = (storeRows as { id: string; store_name: string; store_code: string; region: string }[] | null) ?? []
+    setStores(sRows)
+    setRegions(Array.from(new Set(sRows.map((s) => s.region))).sort())
 
     if (rosterData && rosterData.length > 0) {
       const { count: total } = await supabase.from('employee_roster').select('*', { count: 'exact', head: true })
@@ -145,6 +228,10 @@ export default function TeamPage() {
 
   const handleRoleUpdate = (id: string, role: string) => {
     setProfiles((prev) => prev.map((p) => p.id === id ? { ...p, role } : p))
+  }
+
+  const handleScopeUpdate = (id: string, patch: Partial<ProfileRow>) => {
+    setProfiles((prev) => prev.map((p) => p.id === id ? { ...p, ...patch } : p))
   }
 
   const roleGroups = ROLES.slice().reverse().map((r) => ({
@@ -261,6 +348,13 @@ export default function TeamPage() {
                     <span className="text-[10px] font-mono text-[var(--text-muted)] shrink-0 hidden sm:block">
                       {p.emp_id.toUpperCase()}
                     </span>
+                  )}
+
+                  {/* Scope (store / department / region, depending on role) */}
+                  {isSuperAdmin && (
+                    <div className="shrink-0 hidden md:block">
+                      <ScopeEditor p={p} stores={stores} regions={regions} onUpdated={handleScopeUpdate} />
+                    </div>
                   )}
 
                   {/* Role */}

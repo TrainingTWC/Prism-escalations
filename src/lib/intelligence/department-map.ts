@@ -1,8 +1,14 @@
 /**
  * Maps Prism Intelligence department strings → Prism Escalations category enum.
- * Keys are lowercase. Values must match the CHECK constraint: Operations|HR|IT|SCM|QA
+ * Keys are lowercase. Values must match the CHECK constraint:
+ * Operations|HR|IT|SCM|QA|Finance|Maintenance|L&D
+ * (Keep in sync with supabase/functions/audit-ingest DEPARTMENT_MAP.)
  */
-const DEPARTMENT_MAP: Record<string, 'Operations' | 'HR' | 'IT' | 'SCM' | 'QA'> = {
+export type TicketCategory =
+  | 'Operations' | 'HR' | 'IT' | 'SCM' | 'QA'
+  | 'Finance' | 'Maintenance' | 'L&D'
+
+const DEPARTMENT_MAP: Record<string, TicketCategory> = {
   operations: 'Operations',
   ops: 'Operations',
   operational: 'Operations',
@@ -18,9 +24,12 @@ const DEPARTMENT_MAP: Record<string, 'Operations' | 'HR' | 'IT' | 'SCM' | 'QA'> 
   talent: 'HR',
   hrbp: 'HR',
   payroll: 'HR',
-  training: 'HR',
-  learning: 'HR',
-  lms: 'HR',
+
+  training: 'L&D',
+  learning: 'L&D',
+  lms: 'L&D',
+  'l&d': 'L&D',
+  lnd: 'L&D',
 
   it: 'IT',
   tech: 'IT',
@@ -46,9 +55,22 @@ const DEPARTMENT_MAP: Record<string, 'Operations' | 'HR' | 'IT' | 'SCM' | 'QA'> 
   safety: 'QA',
   health: 'QA',
   'food safety': 'QA',
-}
 
-export type TicketCategory = 'Operations' | 'HR' | 'IT' | 'SCM' | 'QA'
+  finance: 'Finance',
+  accounts: 'Finance',
+  billing: 'Finance',
+  cash: 'Finance',
+
+  maintenance: 'Maintenance',
+  repair: 'Maintenance',
+  repairs: 'Maintenance',
+  facilities: 'Maintenance',
+  facility: 'Maintenance',
+  equipment: 'Maintenance',
+  electrical: 'Maintenance',
+  plumbing: 'Maintenance',
+  hvac: 'Maintenance',
+}
 
 export function mapDepartment(raw: string | null | undefined): TicketCategory {
   if (!raw) return 'Operations'

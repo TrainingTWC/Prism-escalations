@@ -143,6 +143,42 @@ html, body {
   font-feature-settings: "tnum" 1, "calt" 0;
 }
 
+/* ----------------------------------------------------------------------------
+   Native app shell (Capacitor / Android WebView)
+   Disables pinch-zoom, text callouts, overscroll glow, tap highlight and
+   honours device safe-area insets so the wrapped APK feels native.
+   -------------------------------------------------------------------------- */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;          /* no double-tap-to-zoom */
+}
+
+body {
+  overscroll-behavior-y: none;         /* kill pull-to-refresh bounce */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;         /* no long-press image/text menu */
+}
+
+/* Allow text selection only in genuine inputs / editable fields. */
+input,
+textarea,
+[contenteditable="true"],
+[data-selectable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Safe-area aware utility for fixed chrome (top bars / bottom nav). */
+.safe-top    { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Body class toggled by the native bridge once Capacitor is detected. */
+.is-native {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 ::selection { background: var(--accent-glow); color: var(--text-primary); }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }

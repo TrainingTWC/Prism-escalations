@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Prism Escalations</string>
+    <string name="title_activity_main">Prism Escalations</string>
+    <string name="package_name">in.prismintelligence.escalations</string>
+    <string name="custom_url_scheme">in.prismintelligence.escalations</string>
+</resources>

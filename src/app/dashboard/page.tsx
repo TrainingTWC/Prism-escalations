@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import Link from 'next/link'
 import { AppShell } from '@/components/layout/AppShell'
 import { supabase } from '@/lib/supabase/client'
+import { normalizeSeverity } from '@/lib/ticket-utils'
 import type { TicketWithRelations } from '@/lib/supabase/database.types'
 import {
   ArrowRight,
@@ -20,18 +21,21 @@ import {
 } from 'lucide-react'
 
 const SEVERITIES = [
-  { key: 'critical', label: 'Critical', color: '#EF4444' },
-  { key: 'high', label: 'High', color: '#F59E0B' },
-  { key: 'medium', label: 'Medium', color: '#E07B39' },
-  { key: 'low', label: 'Low', color: '#22C55E' },
+  { key: 'P0', label: 'P0 · Critical', color: '#EF4444' },
+  { key: 'P1', label: 'P1 · High', color: '#F59E0B' },
+  { key: 'P2', label: 'P2 · Medium', color: '#E07B39' },
+  { key: 'P3', label: 'P3 · Low', color: '#22C55E' },
 ] as const
 
 const CATEGORIES = [
   { key: 'Operations', color: '#E07B39' },
+  { key: 'Maintenance', color: '#6B7280' },
   { key: 'HR', color: '#8B5CF6' },
   { key: 'IT', color: '#3B82F6' },
   { key: 'SCM', color: '#10B981' },
   { key: 'QA', color: '#EF4444' },
+  { key: 'Finance', color: '#F59E0B' },
+  { key: 'L&D', color: '#EC4899' },
 ] as const
 
 function pct(value: number, total: number) {
@@ -46,12 +50,12 @@ function formatPercent(value: number) {
 function statusTone(status: TicketWithRelations['status']) {
   if (status === 'closed' || status === 'resolved') return '#22C55E'
   if (status === 'in_progress') return '#E07B39'
-  if (status === 'escalated') return '#EF4444'
+  if (status === 'rejected') return '#EF4444'
   return '#8B5CF6'
 }
 
 function severityTone(severity: TicketWithRelations['severity']) {
-  return SEVERITIES.find((item) => item.key === severity)?.color ?? '#71717A'
+  return SEVERITIES.find((item) => item.key === normalizeSeverity(severity))?.color ?? '#71717A'
 }
 
 function PremiumMetric({
@@ -144,14 +148,14 @@ export default function DashboardPage() {
   }, [])
 
   const metrics = useMemo(() => {
-    const active = tickets.filter((ticket) => ticket.status !== 'closed' && ticket.status !== 'resolved')
-    const critical = active.filter((ticket) => ticket.severity === 'critical')
+    const active = tickets.filter((ticket) => ticket.status !== 'closed' && ticket.status !== 'resolved' && ticket.status !== 'rejected')
+    const critical = active.filter((ticket) => normalizeSeverity(ticket.severity) === 'P0')
     const breached = active.filter((ticket) => ticket.sla_deadline && new Date(ticket.sla_deadline) < new Date())
     const resolvedToday = tickets.filter((ticket) => {
       if (!ticket.resolved_at) return false
       return new Date(ticket.resolved_at).toDateString() === new Date().toDateString()
     })
-    const escalated = active.filter((ticket) => ticket.status === 'escalated')
+    const escalated = active.filter((ticket) => ticket.blocked)
 
     return {
       total: tickets.length,
@@ -168,7 +172,7 @@ export default function DashboardPage() {
 
   const severityCounts = SEVERITIES.map((severity) => ({
     ...severity,
-    count: metrics.active.filter((ticket) => ticket.severity === severity.key).length,
+    count: metrics.active.filter((ticket) => normalizeSeverity(ticket.severity) === severity.key).length,
   }))
   const categoryCounts = CATEGORIES.map((category) => ({
     ...category,
@@ -354,8 +358,8 @@ export default function DashboardPage() {
               />
               <InsightCard
                 tone="#8B5CF6"
-                title="Escalation load"
-                detail="Tickets currently in escalated state."
+                title="Blocked load"
+                detail="Tickets currently flagged as blocked (snag)."
                 value={`${metrics.escalatedCount}`}
               />
             </div>

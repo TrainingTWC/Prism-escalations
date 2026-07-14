@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/auth.store'
 import { SidebarProvider, useSidebar } from '@/lib/sidebar-context'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
+import { BottomNav } from './BottomNav'
 import { PageHeader } from '@/components/ui/PageHeader'
 
 interface AppShellProps {
@@ -56,15 +57,17 @@ function AppShellInner({ children, title, subtitle, overline, actions, bare = fa
       <div className="ambient-blob ambient-blob--tl" />
       <div className="ambient-blob ambient-blob--br" />
 
+      {/* Desktop-only sidebar; phones get the bottom tab bar instead */}
       <Sidebar />
 
       <div
-        className="relative z-10 flex flex-col min-h-screen transition-[padding] duration-300"
-        style={{ paddingLeft: width }}
+        className="relative z-10 flex flex-col min-h-screen transition-[padding] duration-300 lg:pl-[var(--shell-pl)]"
+        style={{ ['--shell-pl' as string]: `${width}px` }}
       >
         <Topbar />
 
-        <main className="flex-1 w-full px-6 lg:px-10 py-8">
+        {/* pb clears the fixed bottom nav on mobile */}
+        <main className="flex-1 w-full px-4 sm:px-6 lg:px-10 py-5 lg:py-8 pb-28 lg:pb-8">
           <div className="max-w-[1400px] mx-auto w-full">
             {!bare && (
               <PageHeader title={title} subtitle={subtitle} overline={overline} actions={actions} />
@@ -74,7 +77,7 @@ function AppShellInner({ children, title, subtitle, overline, actions, bare = fa
         </main>
 
         <footer
-          className="px-6 lg:px-10 py-5 text-[10px] tracking-[0.18em] uppercase"
+          className="hidden lg:block px-6 lg:px-10 py-5 text-[10px] tracking-[0.18em] uppercase"
           style={{
             color: 'var(--text-secondary)',
             borderTop: '1px solid var(--border-subtle)',
@@ -87,6 +90,8 @@ function AppShellInner({ children, title, subtitle, overline, actions, bare = fa
           </div>
         </footer>
       </div>
+
+      <BottomNav />
     </div>
   )
 }

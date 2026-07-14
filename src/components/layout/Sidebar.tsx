@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard, Ticket, Store, Users, BarChart3,
-  AlertTriangle, ChevronLeft, Home, Brain, Search,
+  AlertTriangle, ChevronLeft, Home, Brain, Search, Route,
 } from 'lucide-react'
 import { useSidebar, SIDEBAR_WIDTH, SIDEBAR_WIDTH_COLLAPSED } from '@/lib/sidebar-context'
 import { cn } from '@/lib/cn'
@@ -26,8 +26,9 @@ const PRIMARY_NAV: NavItem[] = [
 ]
 
 const ADMIN_NAV: NavItem[] = [
-  { href: '/stores', icon: Store, label: 'Stores' },
-  { href: '/team',   icon: Users, label: 'Team' },
+  { href: '/stores',  icon: Store, label: 'Stores' },
+  { href: '/team',    icon: Users, label: 'Team' },
+  { href: '/routing', icon: Route, label: 'Routing' },
 ]
 
 export function Sidebar() {
@@ -67,7 +68,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className="fixed top-0 left-0 bottom-0 z-50 flex flex-col transition-[width] duration-300"
+      className="fixed top-0 left-0 bottom-0 z-50 hidden lg:flex flex-col transition-[width] duration-300"
       style={{
         width,
         background: 'var(--sidebar-bg)',

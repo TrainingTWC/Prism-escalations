@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { MapPin, Clock, User, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
-import { SeverityBadge, StatusPill, AutoSourceBadge, PatternBadge } from './Badges'
+import { SeverityBadge, StatusPill, AutoSourceBadge, PatternBadge, BlockedBadge } from './Badges'
 import { SlaCountdown } from './SlaCountdown'
+import { normalizeStatus } from '@/lib/ticket-utils'
 import type { TicketWithRelations } from '@/lib/supabase/database.types'
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/cn'
@@ -30,7 +31,8 @@ const CATEGORY_STUB: Record<string, [string, string]> = {
 export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }: TicketCardProps) {
   const [stubFrom, stubTo] = CATEGORY_STUB[ticket.category] ?? ['#C76A2E', '#7A3A0E']
   const stub = `linear-gradient(160deg, ${stubFrom} 0%, ${stubTo} 100%)`
-  const isClosed = ticket.status === 'closed' || ticket.status === 'resolved'
+  const normStatus = normalizeStatus(ticket.status)
+  const isClosed = normStatus === 'closed' || normStatus === 'resolved'
 
   const inner = (
     <article
@@ -95,6 +97,7 @@ export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }
               </span>
               <SeverityBadge severity={ticket.severity} />
               <StatusPill status={ticket.status} />
+              {ticket.blocked && <BlockedBadge reason={ticket.blocked_reason} />}
               {ticket.intelligence_source && (
                 <AutoSourceBadge confidence={ticket.intelligence_ai_confidence} />
               )}

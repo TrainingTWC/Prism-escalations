@@ -10,31 +10,31 @@ import {
 import { format, subDays, eachDayOfInterval, startOfDay } from 'date-fns'
 import { Clock, ShieldAlert, RefreshCcw, TrendingUp, Brain, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
+import { normalizeSeverity } from '@/lib/ticket-utils'
 
 // ─── colour palette ──────────────────────────────────────────────────────────
 const CAT_COLORS: Record<string, string> = {
-  Operations: '#E07B39',
-  HR:         '#8B5CF6',
-  IT:         '#3B82F6',
-  SCM:        '#10B981',
-  QA:         '#EF4444',
+  Operations:  '#E07B39',
+  Maintenance: '#6B7280',
+  HR:          '#8B5CF6',
+  IT:          '#3B82F6',
+  SCM:         '#10B981',
+  QA:          '#EF4444',
+  Finance:     '#F59E0B',
+  'L&D':       '#EC4899',
 }
 const SEV_COLORS: Record<string, string> = {
-  critical: '#EF4444',
-  high:     '#F59E0B',
-  medium:   '#E07B39',
-  low:      '#22C55E',
+  P0: '#EF4444',
+  P1: '#F59E0B',
+  P2: '#E07B39',
+  P3: '#22C55E',
 }
 const STATUS_COLORS: Record<string, string> = {
-  open:           '#8B5CF6',
-  acknowledged:   '#3B82F6',
-  accepted:       '#06B6D4',
-  in_progress:    '#E07B39',
-  waiting:        '#F59E0B',
-  snag:           '#EF4444',
-  verification:   '#10B981',
-  resolved:       '#22C55E',
-  closed:         '#6B7280',
+  open:        '#8B5CF6',
+  in_progress: '#E07B39',
+  resolved:    '#22C55E',
+  closed:      '#6B7280',
+  rejected:    '#EF4444',
 }
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -43,6 +43,7 @@ interface TicketRow {
   category: string
   severity: string
   status: string
+  blocked: boolean | null
   store_id: string | null
   sla_deadline: string | null
   resolved_at: string | null
@@ -106,7 +107,7 @@ export default function AnalyticsPage() {
       while (true) {
         const { data } = await supabase
           .from('tickets')
-          .select('id, category, severity, status, store_id, sla_deadline, resolved_at, closed_at, created_at, reopen_count, store:stores(store_name, store_code)')
+          .select('id, category, severity, status, blocked, store_id, sla_deadline, resolved_at, closed_at, created_at, reopen_count, store:stores(store_name, store_code)')
           .range(offset, offset + PAGE - 1)
           .order('created_at', { ascending: false })
         if (!data || data.length === 0) break
@@ -149,8 +150,8 @@ export default function AnalyticsPage() {
     const reopened = tickets.filter((t) => t.reopen_count > 0)
     const reopenPct = Math.round((reopened.length / total) * 100)
 
-    // Escalation proxy: tickets in 'snag' status or severity critical open >24h
-    const escalated = tickets.filter((t) => t.status === 'snag' || t.status === 'escalated')
+    // Escalation proxy: tickets flagged as blocked (snag)
+    const escalated = tickets.filter((t) => t.blocked)
 
     return { total, mttrDisplay, slaPct, reopenPct, escalatedCount: escalated.length }
   }, [tickets])
@@ -179,9 +180,9 @@ export default function AnalyticsPage() {
 
   // ── severity counts ───────────────────────────────────────────────────────
   const severityData = useMemo(() =>
-    ['critical', 'high', 'medium', 'low'].map((s) => ({
-      name: s.charAt(0).toUpperCase() + s.slice(1),
-      value: tickets.filter((t) => t.severity === s).length,
+    (['P0', 'P1', 'P2', 'P3'] as const).map((s) => ({
+      name: s,
+      value: tickets.filter((t) => normalizeSeverity(t.severity) === s).length,
       key: s,
     })),
     [tickets]

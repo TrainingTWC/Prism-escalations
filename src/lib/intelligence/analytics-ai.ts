@@ -8,6 +8,7 @@ export interface AnalyticsTicket {
   category: string
   severity: string
   status: string
+  blocked?: boolean | null
   store_id: string | null
   sla_deadline: string | null
   resolved_at: string | null
@@ -213,7 +214,7 @@ export function buildAnalyticsSnapshot(tickets: AnalyticsTicket[]): AnalyticsSna
     else active++
 
     if (t.reopen_count > 0) reopened++
-    if (t.status === 'escalated' || t.status === 'snag') escalated++
+    if (t.blocked) escalated++
 
     const code = t.store?.store_code || t.store_id || 'Unknown'
     const name = t.store?.store_name || code
@@ -223,7 +224,7 @@ export function buildAnalyticsSnapshot(tickets: AnalyticsTicket[]): AnalyticsSna
     const breached = !!t.sla_deadline && new Date(t.sla_deadline) < now
     if (!closed) {
       if (breached) { breachedOpen++; storeVol[code].breached++ }
-      if (t.severity === 'critical') criticalOpen++
+      if (t.severity === 'P0' || t.severity === 'critical') criticalOpen++
       const age = daysAgo(t.created_at)
       if (age <= 1) aging['0-1d']++
       else if (age <= 3) aging['1-3d']++

@@ -5,6 +5,7 @@ import { Plus, Search, Sun, Moon, KeyRound, LogOut } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import { useTheme } from '@/lib/theme-context'
 import { NotificationBell } from './NotificationBell'
+import { PrismLogo } from '@/components/ui/PrismLogo'
 
 export function Topbar() {
   const { profile, signOut } = useAuthStore()
@@ -12,7 +13,7 @@ export function Topbar() {
 
   return (
     <header
-      className="h-14 sticky top-0 z-40 flex items-center justify-between px-6 gap-4"
+      className="h-14 sticky top-0 z-40 flex items-center justify-between px-4 lg:px-6 gap-3"
       style={{
         background: 'color-mix(in oklab, var(--sidebar-bg) 92%, transparent)',
         borderBottom: '1px solid var(--sidebar-border)',
@@ -20,8 +21,16 @@ export function Topbar() {
         WebkitBackdropFilter: 'blur(16px) saturate(1.2)',
       }}
     >
-      {/* Search */}
-      <div className="relative w-full max-w-md">
+      {/* Mobile: brand (sidebar is hidden) */}
+      <Link href="/" className="flex lg:hidden items-center gap-2.5 shrink-0">
+        <PrismLogo size={28} className="shrink-0" />
+        <span className="text-[13px] font-extrabold tracking-tight text-[var(--text-primary)]">
+          Prism <span className="text-gradient-ember">Escalations</span>
+        </span>
+      </Link>
+
+      {/* Desktop: search */}
+      <div className="relative w-full max-w-md hidden lg:block">
         <Search
           size={14}
           className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"
@@ -45,10 +54,14 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* New Ticket */}
-        <Link href="/tickets/new" className="btn-primary" style={{ padding: '7px 14px', fontSize: 12 }}>
+        {/* New Ticket (desktop; mobile has the centre + tab) */}
+        <Link
+          href="/tickets/new"
+          className="btn-primary hidden lg:inline-flex"
+          style={{ padding: '7px 14px', fontSize: 12 }}
+        >
           <Plus size={13} strokeWidth={2.5} />
-          <span className="hidden sm:inline">New Ticket</span>
+          <span>New Ticket</span>
         </Link>
 
         {/* Theme */}

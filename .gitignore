@@ -39,3 +39,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# mobile / capacitor secrets — NEVER commit these
+*.keystore
+*.jks
+android/app/google-services.json
+google-services.json
+service-account.json
+*service-account*.json
+
+# capacitor / android secrets + build artifacts
+/android/app/google-services.json
+*.keystore
+*.jks
+/android/app/release.keystore
+/android/.gradle/
+/android/app/src/main/assets/public/
+/android/app/src/main/assets/capacitor.config.json
+/android/app/src/main/assets/capacitor.plugins.json

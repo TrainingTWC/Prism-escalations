@@ -1,7 +1,8 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/lib/theme-context'
+import { NativeBridge } from '@/components/native/NativeBridge'
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
@@ -18,6 +19,17 @@ export const metadata: Metadata = {
     'escalation management, SLA tracking, operational intelligence, retail operations, issue management',
 }
 
+// Native-app feel: fixed scale, no user zoom, safe-area aware, dark theme chrome.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  minimumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+  themeColor: '#0b0b12',
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning className={jetbrainsMono.variable}>
@@ -30,6 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body suppressHydrationWarning className={`${jetbrainsMono.className} antialiased`}>
         <ThemeProvider>{children}</ThemeProvider>
+        <NativeBridge />
       </body>
     </html>
   )

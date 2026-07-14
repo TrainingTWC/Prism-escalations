@@ -58,7 +58,7 @@ interface TicketRow {
   store: { store_name: string | null } | null
 }
 
-const ACTIVE = ['open', 'acknowledged', 'accepted', 'in_progress', 'waiting', 'snag', 'verification']
+const ACTIVE = ['open', 'in_progress', 'resolved']
 
 function deriveNotifications(rows: TicketRow[]): NotifItem[] {
   const now = Date.now()

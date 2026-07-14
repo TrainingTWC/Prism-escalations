@@ -99,6 +99,12 @@ export type Database = {
           reopen_count: number
           created_at: string
           updated_at: string
+          // Workflow v3
+          blocked: boolean | null
+          blocked_reason: string | null
+          blocked_at: string | null
+          verify_reminders_sent: number | null
+          sla_breach_notified: boolean | null
           // Intelligence integration
           intelligence_source: boolean | null
           intelligence_submission_id: string | null
@@ -136,6 +142,11 @@ export type Database = {
           reopen_count?: number
           created_at?: string
           updated_at?: string
+          blocked?: boolean | null
+          blocked_reason?: string | null
+          blocked_at?: string | null
+          verify_reminders_sent?: number | null
+          sla_breach_notified?: boolean | null
           intelligence_source?: boolean | null
           intelligence_submission_id?: string | null
           intelligence_section_id?: string | null
@@ -170,6 +181,11 @@ export type Database = {
           closed_at?: string | null
           reopen_count?: number
           updated_at?: string
+          blocked?: boolean | null
+          blocked_reason?: string | null
+          blocked_at?: string | null
+          verify_reminders_sent?: number | null
+          sla_breach_notified?: boolean | null
           intelligence_source?: boolean | null
           intelligence_submission_id?: string | null
           intelligence_section_id?: string | null
@@ -269,6 +285,34 @@ export type Database = {
         }
       }
 
+      department_routing: {
+        Row: {
+          id: string
+          department: string
+          region: string | null
+          owner_id: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          department: string
+          region?: string | null
+          owner_id: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          department?: string
+          region?: string | null
+          owner_id?: string
+          is_active?: boolean
+          updated_at?: string
+        }
+      }
+
       employee_roster: {
         Row: {
           id: string
@@ -315,6 +359,7 @@ export type Database = {
 }
 
 export type Profile = Database['public']['Tables']['profiles']['Row']
+export type DepartmentRouting = Database['public']['Tables']['department_routing']['Row']
 export type Store = Database['public']['Tables']['stores']['Row']
 export type EmployeeRoster = Database['public']['Tables']['employee_roster']['Row']
 export type Ticket = Database['public']['Tables']['tickets']['Row']

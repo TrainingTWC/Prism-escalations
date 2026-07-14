@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { AppShell } from '@/components/layout/AppShell'
@@ -7,17 +7,24 @@ import { GlassPanel } from '@/components/ui/GlassPanel'
 import { FilterBar, FilterItem } from '@/components/ui/FilterBar'
 import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/auth.store'
+import { CATEGORY_LIST, SEVERITY_OPTIONS, STATUS_LABELS, normalizeStatus } from '@/lib/ticket-utils'
+import { tapLight } from '@/lib/native/haptics'
 import type { TicketWithRelations } from '@/lib/supabase/database.types'
 import { Filter, Trash2, X, CheckSquare, Square } from 'lucide-react'
 
-const STATUSES   = ['open', 'acknowledged', 'accepted', 'in_progress', 'waiting', 'snag', 'resolved', 'verification', 'closed']
-const SEVERITIES = ['critical', 'high', 'medium', 'low']
-const CATEGORIES = ['Operations', 'HR', 'IT', 'SCM', 'QA']
-const STATUS_LABELS: Record<string, string> = {
-  open: 'Open', acknowledged: 'Acknowledged', accepted: 'Accepted',
-  in_progress: 'In Progress', waiting: 'Waiting', snag: 'SNAG',
-  resolved: 'Resolved', verification: 'Verification', closed: 'Closed',
-}
+const STATUSES = ['open', 'in_progress', 'resolved', 'closed', 'rejected']
+
+type QuickFilter = 'active' | 'open' | 'in_progress' | 'blocked' | 'resolved' | 'closed' | 'all'
+
+const QUICK_FILTERS: { value: QuickFilter; label: string }[] = [
+  { value: 'active',      label: 'Active' },
+  { value: 'open',        label: 'Open' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'blocked',     label: 'Blocked' },
+  { value: 'resolved',    label: 'To Verify' },
+  { value: 'closed',      label: 'Closed' },
+  { value: 'all',         label: 'All' },
+]
 
 interface Filters {
   status: string
@@ -39,6 +46,7 @@ export default function TicketsPage() {
 
   const [tickets, setTickets] = useState<TicketWithRelations[]>([])
   const [loading, setLoading] = useState(true)
+  const [quick, setQuick] = useState<QuickFilter>('active')
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
 
   const [selectMode, setSelectMode] = useState(false)
@@ -47,6 +55,7 @@ export default function TicketsPage() {
   const [deleting, setDeleting] = useState(false)
 
   const fetchTickets = useCallback(async () => {
+    // Visibility is enforced by RLS — each role only receives its own scope.
     let query = supabase
       .from('tickets')
       .select(`*, store:stores(*), raised_by_profile:profiles!tickets_raised_by_fkey(*), assigned_to_profile:profiles!tickets_assigned_to_fkey(*), escalations(*)`)
@@ -98,16 +107,23 @@ export default function TicketsPage() {
     [tickets],
   )
 
-  // Client-side filtering for store / region / AM / trainer / HR
+  // Quick chip + client-side filters
   const visibleTickets = useMemo(() => tickets.filter((t) => {
+    const s = normalizeStatus(t.status)
+    if (quick === 'active' && !(s === 'open' || s === 'in_progress')) return false
+    if (quick === 'open' && s !== 'open') return false
+    if (quick === 'in_progress' && s !== 'in_progress') return false
+    if (quick === 'blocked' && !t.blocked) return false
+    if (quick === 'resolved' && s !== 'resolved') return false
+    if (quick === 'closed' && !(s === 'closed' || s === 'rejected')) return false
+
     if (filters.store && t.store?.id !== filters.store) return false
     if (filters.region && t.store?.region !== filters.region) return false
     if (filters.am && t.store?.am_name !== filters.am) return false
     if (filters.trainer && t.store?.trainer_name !== filters.trainer) return false
     if (filters.hr && t.store?.hr_name !== filters.hr) return false
     return true
-  }), [tickets, filters.store, filters.region, filters.am, filters.trainer, filters.hr])
-
+  }), [tickets, quick, filters.store, filters.region, filters.am, filters.trainer, filters.hr])
 
   const exitSelectMode = () => {
     setSelectMode(false)
@@ -148,7 +164,7 @@ export default function TicketsPage() {
   }
 
   const hasFilters   = Boolean(filters.status || filters.severity || filters.category || filters.store || filters.region || filters.am || filters.trainer || filters.hr || filters.search)
-  const clearFilters = () => setFilters(EMPTY_FILTERS)
+  const clearFilters = () => { setFilters(EMPTY_FILTERS); setQuick('active') }
 
   const selectClass = 'prism-input'
   const selectStyle = { width: 'auto', minWidth: 140, fontSize: 12 } as const
@@ -158,8 +174,29 @@ export default function TicketsPage() {
     <AppShell
       overline="Issue Queue"
       title="Tickets"
-      subtitle={`${visibleTickets.length} ${visibleTickets.length === 1 ? 'ticket' : 'tickets'} matching current view`}
+      subtitle={`${visibleTickets.length} ${visibleTickets.length === 1 ? 'ticket' : 'tickets'} in your scope`}
     >
+      {/* Quick filter chips (the primary mobile control) */}
+      <div className="flex gap-2 overflow-x-auto pb-1 mb-4 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+        {QUICK_FILTERS.map(({ value, label }) => {
+          const active = quick === value
+          return (
+            <button
+              key={value}
+              onClick={() => { tapLight(); setQuick(value) }}
+              className="shrink-0 px-3.5 py-2 rounded-full text-[12px] font-bold transition-all"
+              style={{
+                background: active ? 'var(--accent-dim)' : 'var(--card-bg)',
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                color: active ? 'var(--accent)' : 'var(--text-tertiary)',
+              }}
+            >
+              {label}
+            </button>
+          )
+        })}
+      </div>
+
       <FilterBar
         onSearch={(v) => setFilters((f) => ({ ...f, search: v }))}
         searchValue={filters.search}
@@ -200,13 +237,13 @@ export default function TicketsPage() {
         <FilterItem label="Severity">
           <select value={filters.severity} onChange={(e) => setFilters((f) => ({ ...f, severity: e.target.value }))} className={selectClass} style={{ ...selectStyle, minWidth: 130 }}>
             <option value="">All Severities</option>
-            {SEVERITIES.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            {SEVERITY_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </FilterItem>
-        <FilterItem label="Category">
+        <FilterItem label="Department">
           <select value={filters.category} onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))} className={selectClass} style={{ ...selectStyle, minWidth: 130 }}>
-            <option value="">All Categories</option>
-            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            <option value="">All Departments</option>
+            {CATEGORY_LIST.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </FilterItem>
         <FilterItem label="Store">
@@ -267,7 +304,7 @@ export default function TicketsPage() {
         <GlassPanel padding="lg" className="text-center">
           <Filter size={32} className="mx-auto mb-4 text-[var(--text-muted)]" />
           <p className="text-[14px] font-semibold text-[var(--text-secondary)] mb-1">No tickets found</p>
-          <p className="text-xs text-[var(--text-muted)]">{hasFilters ? 'Try clearing your filters' : 'Create your first ticket to get started'}</p>
+          <p className="text-xs text-[var(--text-muted)]">{hasFilters || quick !== 'all' ? 'Try a different filter' : 'Create your first ticket to get started'}</p>
         </GlassPanel>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-3" style={{ paddingBottom: selectMode ? 96 : 0 }}>

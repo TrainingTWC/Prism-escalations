@@ -19,15 +19,16 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; label: string
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
   open:         { color: 'var(--accent)',         bg: 'var(--accent-dim)' },
-  acknowledged: { color: 'var(--color-info)',     bg: 'rgba(59,130,246,0.10)' },
-  accepted:     { color: 'var(--color-success)',  bg: 'rgba(34,197,94,0.10)' },
-  rejected:     { color: 'var(--color-danger)',   bg: 'rgba(239,68,68,0.10)' },
   in_progress:  { color: 'var(--color-info)',     bg: 'rgba(59,130,246,0.10)' },
-  waiting:      { color: 'var(--color-warning)',  bg: 'rgba(234,179,8,0.10)' },
-  snag:         { color: 'var(--color-danger)',   bg: 'rgba(239,68,68,0.10)' },
   resolved:     { color: 'var(--color-success)',  bg: 'rgba(34,197,94,0.10)' },
-  verification: { color: 'var(--accent)',         bg: 'var(--accent-dim)' },
   closed:       { color: 'var(--text-muted)',     bg: 'rgba(122,122,136,0.10)' },
+  rejected:     { color: 'var(--color-danger)',   bg: 'rgba(239,68,68,0.10)' },
+  // Legacy statuses (pre-workflow-v3 rows)
+  acknowledged: { color: 'var(--color-info)',     bg: 'rgba(59,130,246,0.10)' },
+  accepted:     { color: 'var(--color-info)',     bg: 'rgba(59,130,246,0.10)' },
+  waiting:      { color: 'var(--color-info)',     bg: 'rgba(59,130,246,0.10)' },
+  snag:         { color: 'var(--color-info)',     bg: 'rgba(59,130,246,0.10)' },
+  verification: { color: 'var(--color-success)',  bg: 'rgba(34,197,94,0.10)' },
 }
 
 export function SeverityBadge({ severity, size = 'sm' }: SeverityBadgeProps) {
@@ -103,6 +104,27 @@ export function AutoSourceBadge({ confidence }: { confidence?: number | null }) 
       {/* Sparkle icon via unicode */}
       <span style={{ fontSize: 9 }}>✦</span>
       Auto · AI{pct != null ? ` ${pct}%` : ''}
+    </span>
+  )
+}
+
+/** Shown when a fixer has flagged the ticket as blocked (snag). */
+export function BlockedBadge({ reason }: { reason?: string | null }) {
+  return (
+    <span
+      className="badge-pill inline-flex items-center gap-1"
+      title={reason ?? undefined}
+      style={{
+        fontSize: 10,
+        color: 'var(--color-danger)',
+        background: 'rgba(239,68,68,0.10)',
+        border: '1px solid rgba(239,68,68,0.30)',
+        fontWeight: 700,
+        letterSpacing: '0.04em',
+        padding: '3px 8px',
+      }}
+    >
+      ⛔ Blocked
     </span>
   )
 }
