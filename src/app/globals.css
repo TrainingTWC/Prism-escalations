@@ -152,10 +152,16 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   touch-action: manipulation;          /* no double-tap-to-zoom */
+  /* Kill pull-to-refresh bounce. Must live on <html> (the actual scrolling
+     element here, since both html/body compute overflow-y:auto from the
+     shared overflow-x:hidden rule below) — placing it on <body> instead
+     breaks scroll chaining entirely: body has zero scrollable range of its
+     own, so it's permanently "at its boundary" and overscroll-behavior:none
+     stops the wheel/touch delta from ever reaching html, freezing scroll. */
+  overscroll-behavior-y: none;
 }
 
 body {
-  overscroll-behavior-y: none;         /* kill pull-to-refresh bounce */
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;         /* no long-press image/text menu */
 }
