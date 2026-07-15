@@ -396,14 +396,14 @@ export default function TeamPage() {
                   Prism Platform employee sync
                 </p>
                 <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-                  Stores and employees are automatically synced from Prism Platform every 5 days.
-                  To trigger an immediate sync, run:
+                  Stores and employees are automatically synced from Prism Platform daily at
+                  01:30 IST. To trigger an immediate sync, run:
                 </p>
                 <code
                   className="block mt-2 text-[10px] font-mono px-2.5 py-1.5 rounded-[6px] leading-relaxed"
                   style={{ background: 'var(--bg-tertiary)', color: 'var(--accent)', border: '1px solid var(--border-subtle)' }}
                 >
-                  npx convex run --prod internal.supabaseSync.syncStoresAndEmployees &apos;{'{}'}&apos;
+                  npx convex run --prod internal.supabaseRosterSync.syncStoresAndEmployees &apos;{'{}'}&apos;
                 </code>
               </div>
             </div>
