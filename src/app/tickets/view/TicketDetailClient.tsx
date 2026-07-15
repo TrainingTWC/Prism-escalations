@@ -16,13 +16,14 @@ import {
 } from '@/lib/ticket-utils'
 import { applyTicketAction, setTicketBlocked } from '@/lib/ticket-actions'
 import { buzzSuccess, tapLight, tapMedium } from '@/lib/native/haptics'
-import type { TicketWithRelations, Comment, Escalation, Attachment } from '@/lib/supabase/database.types'
+import { CoverageBadge } from '@/components/assets/AssetBadges'
+import type { TicketWithRelations, Comment, Escalation, Attachment, AssetWithRelations } from '@/lib/supabase/database.types'
 import { formatDistanceToNow, format } from 'date-fns'
 import ReactMarkdown from 'react-markdown'
 import {
   ArrowLeft, MapPin, User, Clock, Send, AlertTriangle, Camera, X,
   CheckCircle, Sparkles, RefreshCw, ExternalLink, Trash2, Play,
-  BadgeCheck, OctagonAlert, Undo2, XCircle,
+  BadgeCheck, OctagonAlert, Undo2, XCircle, QrCode, Phone,
 } from 'lucide-react'
 
 type SheetKind = 'resolve' | 'block' | 'reopen' | 'reject' | null
@@ -33,6 +34,7 @@ function TicketDetailInner() {
   const { profile } = useAuthStore()
   const router = useRouter()
   const [ticket, setTicket] = useState<TicketWithRelations | null>(null)
+  const [asset, setAsset] = useState<AssetWithRelations | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [escalations, setEscalations] = useState<Escalation[]>([])
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -66,6 +68,18 @@ function TicketDetailInner() {
 
     const { data: atts } = await supabase
       .from('attachments').select('*').eq('ticket_id', id).order('created_at', { ascending: true })
+
+    const t = tkt as unknown as TicketWithRelations | null
+    if (t?.asset_id) {
+      const { data: a } = await supabase
+        .from('assets')
+        .select('*, category:asset_categories(*), amc_vendor:vendors(*)')
+        .eq('id', t.asset_id)
+        .maybeSingle()
+      setAsset((a as unknown as AssetWithRelations) ?? null)
+    } else {
+      setAsset(null)
+    }
 
     setTicket(tkt as unknown as TicketWithRelations)
     setComments(cmts || [])
@@ -519,6 +533,44 @@ function TicketDetailInner() {
             {status !== 'closed' && ticket.status !== 'rejected' && (
               <GlassPanel padding="md" title="SLA Status">
                 <SlaCountdown deadline={ticket.sla_deadline} />
+              </GlassPanel>
+            )}
+
+            {/* Linked asset (scan-to-report tickets) */}
+            {asset && (
+              <GlassPanel
+                padding="md"
+                title={
+                  <span className="inline-flex items-center gap-1.5">
+                    <QrCode size={12} className="text-[var(--accent)]" /> Asset
+                  </span>
+                }
+              >
+                <Link href={`/assets/view?id=${asset.id}`} className="block" style={{ textDecoration: 'none' }}>
+                  <p className="text-[13px] font-bold text-[var(--text-primary)]">{asset.name}</p>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                    {asset.asset_code}{asset.category ? ` · ${asset.category.name}` : ''}
+                  </p>
+                </Link>
+                <div className="mt-2.5">
+                  <CoverageBadge asset={asset} />
+                </div>
+                {asset.amc_vendor && (
+                  <div
+                    className="mt-3 px-3 py-2.5 rounded-[10px]"
+                    style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}
+                  >
+                    <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                      AMC — route to vendor
+                    </p>
+                    <p className="text-[12px] font-semibold text-[var(--text-primary)] mt-0.5">{asset.amc_vendor.name}</p>
+                    {asset.amc_vendor.phone && (
+                      <a href={`tel:${asset.amc_vendor.phone}`} className="inline-flex items-center gap-1.5 text-[11px] text-[var(--accent)] mt-1">
+                        <Phone size={10} /> {asset.amc_vendor.phone}
+                      </a>
+                    )}
+                  </div>
+                )}
               </GlassPanel>
             )}
 

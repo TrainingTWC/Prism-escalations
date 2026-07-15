@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { AppShell } from '@/components/layout/AppShell'
 import { GlassPanel } from '@/components/ui/GlassPanel'
@@ -10,9 +10,9 @@ import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/auth.store'
 import { CATEGORIES, SEVERITY_OPTIONS } from '@/lib/ticket-utils'
 import { buzzSuccess, tapLight, tapMedium } from '@/lib/native/haptics'
-import type { DepartmentRouting, Profile, Store } from '@/lib/supabase/database.types'
+import type { AssetWithRelations, DepartmentRouting, Profile, Store } from '@/lib/supabase/database.types'
 import {
-  ArrowLeft, AlertCircle, Camera, X, MapPin, UserCheck, UserX,
+  ArrowLeft, AlertCircle, Camera, X, MapPin, UserCheck, UserX, QrCode,
   Wrench, Store as StoreIcon, Users, Monitor, Truck, ShieldCheck, Wallet, GraduationCap,
 } from 'lucide-react'
 
@@ -29,12 +29,15 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 
 const LOCKED_STORE_ROLES = ['store_team', 'store_manager']
 
-export default function NewTicketPage() {
+function NewTicketInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const assetParam = searchParams.get('asset')
   const { profile } = useAuthStore()
   const [stores, setStores] = useState<Store[]>([])
   const [routing, setRouting] = useState<DepartmentRouting[]>([])
   const [owners, setOwners] = useState<Record<string, Pick<Profile, 'id' | 'name'>>>({})
+  const [asset, setAsset] = useState<AssetWithRelations | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -71,6 +74,27 @@ export default function NewTicketPage() {
   useEffect(() => {
     if (profile?.store_id) setForm((f) => ({ ...f, store_id: f.store_id || profile.store_id! }))
   }, [profile])
+
+  // Scan-to-report: an asset id in the URL pins store + department to the asset
+  useEffect(() => {
+    if (!assetParam) return
+    supabase
+      .from('assets')
+      .select('*, category:asset_categories(*), store:stores(*)')
+      .eq('id', assetParam)
+      .maybeSingle()
+      .then(({ data }) => {
+        const a = data as unknown as AssetWithRelations | null
+        if (!a) return
+        setAsset(a)
+        setForm((f) => ({
+          ...f,
+          store_id: a.store_id,
+          category: (a.category?.department ?? f.category) as keyof typeof CATEGORIES,
+          sub_category: a.category?.name ?? f.sub_category,
+        }))
+      })
+  }, [assetParam])
 
   const storeLocked = !!profile && LOCKED_STORE_ROLES.includes(profile.role) && !!profile.store_id
   const selectedStore = stores.find((s) => s.id === form.store_id)
@@ -122,6 +146,7 @@ export default function NewTicketPage() {
         raised_by: profile.id,
         source_type: 'store',
         status: 'open',
+        asset_id: asset?.id ?? null,
       } as never)
       .select('id')
       .single()
@@ -170,6 +195,34 @@ export default function NewTicketPage() {
         </Link>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          {/* Scan-to-report banner: the asset pins store + routing */}
+          {asset && (
+            <div
+              className="flex items-center gap-3 px-4 py-3.5 rounded-[14px]"
+              style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-border)' }}
+            >
+              <span
+                className="w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0"
+                style={{ background: 'var(--bg-tertiary)', color: 'var(--accent)' }}
+              >
+                <QrCode size={17} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.10em] text-[var(--accent)]">Reporting a problem on</p>
+                <p className="text-[14px] font-bold text-[var(--text-primary)] truncate">{asset.name}</p>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  {asset.asset_code}{asset.category ? ` · ${asset.category.name}` : ''}{asset.store ? ` · ${asset.store.store_name}` : ''}
+                </p>
+              </div>
+              <Link
+                href={`/assets/view?id=${asset.id}`}
+                className="shrink-0 text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                View
+              </Link>
+            </div>
+          )}
+
           <GlassPanel padding="md">
             {/* Title */}
             <div className="mb-5">
@@ -186,7 +239,8 @@ export default function NewTicketPage() {
               />
             </div>
 
-            {/* Department tiles */}
+            {/* Department + type pickers (hidden when an asset pins the routing) */}
+            {!asset && (<>
             <div className="mb-5">
               <label className={labelClass}>Department *</label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -239,6 +293,7 @@ export default function NewTicketPage() {
                 </div>
               </div>
             )}
+            </>)}
 
             {/* Severity */}
             <div className="mb-5">
@@ -268,7 +323,8 @@ export default function NewTicketPage() {
               </div>
             </div>
 
-            {/* Store */}
+            {/* Store (hidden when an asset pins it) */}
+            {!asset && (
             <div className="mb-5">
               <label className={labelClass}>Store *</label>
               {storeLocked && selectedStore ? (
@@ -296,6 +352,7 @@ export default function NewTicketPage() {
                 </select>
               )}
             </div>
+            )}
 
             {/* Photos */}
             <div className="mb-5">
@@ -403,5 +460,17 @@ export default function NewTicketPage() {
         </form>
       </div>
     </AppShell>
+  )
+}
+
+export default function NewTicketPage() {
+  return (
+    <Suspense fallback={
+      <AppShell overline="New Issue" title="Create Ticket">
+        <div className="skeleton" style={{ height: 420, maxWidth: 680 }} />
+      </AppShell>
+    }>
+      <NewTicketInner />
+    </Suspense>
   )
 }

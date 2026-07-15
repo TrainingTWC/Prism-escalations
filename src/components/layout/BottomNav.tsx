@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Home, Ticket, Plus, Bell, Menu, X,
-  LayoutDashboard, AlertTriangle, BarChart3, Brain, Store, Users, Route,
+  LayoutDashboard, AlertTriangle, BarChart3, Brain, Store, Users, Route, QrCode,
   Sun, Moon, LogOut,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
@@ -22,6 +22,7 @@ const TABS = [
 ]
 
 const MENU_LINKS = [
+  { href: '/assets',       icon: QrCode,          label: 'Assets' },
   { href: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/escalations',  icon: AlertTriangle,   label: 'Escalations' },
   { href: '/analytics',    icon: BarChart3,       label: 'Analytics' },

@@ -105,6 +105,8 @@ export type Database = {
           blocked_at: string | null
           verify_reminders_sent: number | null
           sla_breach_notified: boolean | null
+          // Assets integration
+          asset_id: string | null
           // Intelligence integration
           intelligence_source: boolean | null
           intelligence_submission_id: string | null
@@ -147,6 +149,7 @@ export type Database = {
           blocked_at?: string | null
           verify_reminders_sent?: number | null
           sla_breach_notified?: boolean | null
+          asset_id?: string | null
           intelligence_source?: boolean | null
           intelligence_submission_id?: string | null
           intelligence_section_id?: string | null
@@ -186,6 +189,7 @@ export type Database = {
           blocked_at?: string | null
           verify_reminders_sent?: number | null
           sla_breach_notified?: boolean | null
+          asset_id?: string | null
           intelligence_source?: boolean | null
           intelligence_submission_id?: string | null
           intelligence_section_id?: string | null
@@ -285,6 +289,119 @@ export type Database = {
         }
       }
 
+      asset_categories: {
+        Row: {
+          id: string
+          name: string
+          department: string
+          default_pm_interval_days: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          department?: string
+          default_pm_interval_days?: number | null
+          created_at?: string
+        }
+        Update: {
+          name?: string
+          department?: string
+          default_pm_interval_days?: number | null
+        }
+      }
+
+      vendors: {
+        Row: {
+          id: string
+          name: string
+          contact_name: string | null
+          phone: string | null
+          email: string | null
+          sla_hours: number | null
+          notes: string | null
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          contact_name?: string | null
+          phone?: string | null
+          email?: string | null
+          sla_hours?: number | null
+          notes?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          name?: string
+          contact_name?: string | null
+          phone?: string | null
+          email?: string | null
+          sla_hours?: number | null
+          notes?: string | null
+          is_active?: boolean
+        }
+      }
+
+      assets: {
+        Row: {
+          id: string
+          asset_code: string
+          name: string
+          category_id: string
+          store_id: string
+          make: string | null
+          model: string | null
+          serial_no: string | null
+          purchase_date: string | null
+          warranty_until: string | null
+          amc_vendor_id: string | null
+          amc_until: string | null
+          status: string
+          notes: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          asset_code?: string
+          name: string
+          category_id: string
+          store_id: string
+          make?: string | null
+          model?: string | null
+          serial_no?: string | null
+          purchase_date?: string | null
+          warranty_until?: string | null
+          amc_vendor_id?: string | null
+          amc_until?: string | null
+          status?: string
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          asset_code?: string
+          name?: string
+          category_id?: string
+          store_id?: string
+          make?: string | null
+          model?: string | null
+          serial_no?: string | null
+          purchase_date?: string | null
+          warranty_until?: string | null
+          amc_vendor_id?: string | null
+          amc_until?: string | null
+          status?: string
+          notes?: string | null
+          updated_at?: string
+        }
+      }
+
       department_routing: {
         Row: {
           id: string
@@ -360,6 +477,15 @@ export type Database = {
 
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type DepartmentRouting = Database['public']['Tables']['department_routing']['Row']
+export type AssetCategory = Database['public']['Tables']['asset_categories']['Row']
+export type Vendor = Database['public']['Tables']['vendors']['Row']
+export type Asset = Database['public']['Tables']['assets']['Row']
+
+export type AssetWithRelations = Asset & {
+  category?: AssetCategory | null
+  store?: Store | null
+  amc_vendor?: Vendor | null
+}
 export type Store = Database['public']['Tables']['stores']['Row']
 export type EmployeeRoster = Database['public']['Tables']['employee_roster']['Row']
 export type Ticket = Database['public']['Tables']['tickets']['Row']

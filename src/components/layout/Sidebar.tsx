@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard, Ticket, Store, Users, BarChart3,
-  AlertTriangle, ChevronLeft, Home, Brain, Search, Route,
+  AlertTriangle, ChevronLeft, Home, Brain, Search, Route, QrCode,
 } from 'lucide-react'
 import { useSidebar, SIDEBAR_WIDTH, SIDEBAR_WIDTH_COLLAPSED } from '@/lib/sidebar-context'
 import { cn } from '@/lib/cn'
@@ -20,6 +20,7 @@ const PRIMARY_NAV: NavItem[] = [
   { href: '/',            icon: Home,            label: 'Home' },
   { href: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/tickets',     icon: Ticket,          label: 'Tickets' },
+  { href: '/assets',      icon: QrCode,          label: 'Assets' },
   { href: '/escalations', icon: AlertTriangle,   label: 'Escalations' },
   { href: '/analytics',   icon: BarChart3,       label: 'Analytics' },
   { href: '/intelligence', icon: Brain,          label: 'AI Intelligence' },
