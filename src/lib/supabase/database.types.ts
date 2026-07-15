@@ -345,6 +345,64 @@ export type Database = {
         }
       }
 
+      asset_pm_tasks: {
+        Row: {
+          id: string
+          asset_id: string
+          title: string
+          daypart: string
+          interval_days: number | null
+          last_done_at: string | null
+          next_due_at: string | null
+          last_alert_at: string | null
+          is_active: boolean
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          asset_id: string
+          title: string
+          daypart?: string
+          interval_days?: number | null
+          last_done_at?: string | null
+          next_due_at?: string | null
+          last_alert_at?: string | null
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          title?: string
+          daypart?: string
+          interval_days?: number | null
+          next_due_at?: string | null
+          is_active?: boolean
+        }
+      }
+
+      asset_pm_log: {
+        Row: {
+          id: string
+          task_id: string | null
+          asset_id: string
+          done_by: string | null
+          done_at: string
+          note: string | null
+        }
+        Insert: {
+          id?: string
+          task_id?: string | null
+          asset_id: string
+          done_by?: string | null
+          done_at?: string
+          note?: string | null
+        }
+        Update: {
+          note?: string | null
+        }
+      }
+
       assets: {
         Row: {
           id: string
@@ -361,6 +419,8 @@ export type Database = {
           amc_until: string | null
           status: string
           notes: string | null
+          warranty_alert_stage: number | null
+          amc_alert_stage: number | null
           created_by: string | null
           created_at: string
           updated_at: string
@@ -480,6 +540,8 @@ export type DepartmentRouting = Database['public']['Tables']['department_routing
 export type AssetCategory = Database['public']['Tables']['asset_categories']['Row']
 export type Vendor = Database['public']['Tables']['vendors']['Row']
 export type Asset = Database['public']['Tables']['assets']['Row']
+export type AssetPmTask = Database['public']['Tables']['asset_pm_tasks']['Row']
+export type AssetPmLog = Database['public']['Tables']['asset_pm_log']['Row']
 
 export type AssetWithRelations = Asset & {
   category?: AssetCategory | null

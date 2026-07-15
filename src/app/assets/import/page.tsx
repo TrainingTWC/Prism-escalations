@@ -9,40 +9,13 @@ import { Button } from '@/components/ui/Button'
 import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/auth.store'
 import { canManageAssets } from '@/lib/asset-utils'
+import { parseCsv, downloadCsv } from '@/lib/csv'
 import { buzzSuccess } from '@/lib/native/haptics'
 import type { AssetCategory, Store } from '@/lib/supabase/database.types'
 import { ArrowLeft, Upload, Download, CheckCircle2, AlertTriangle } from 'lucide-react'
 
 const TEMPLATE_HEADER = 'name,category,store_code,make,model,serial_no,purchase_date,warranty_until'
 const TEMPLATE_EXAMPLE = 'La Marzocco Linea — Bar 1,Espresso Machine,IND-001,La Marzocco,Linea PB,SN12345,2025-04-01,2027-04-01'
-
-/** Minimal CSV parser with double-quote support (handles commas inside quotes). */
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = []
-  let row: string[] = []
-  let cell = ''
-  let inQuotes = false
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') { cell += '"'; i++ } else inQuotes = false
-      } else cell += ch
-    } else if (ch === '"') {
-      inQuotes = true
-    } else if (ch === ',') {
-      row.push(cell); cell = ''
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && text[i + 1] === '\n') i++
-      row.push(cell); cell = ''
-      if (row.some((c) => c.trim() !== '')) rows.push(row)
-      row = []
-    } else cell += ch
-  }
-  row.push(cell)
-  if (row.some((c) => c.trim() !== '')) rows.push(row)
-  return rows
-}
 
 interface ParsedRow {
   line: number
@@ -85,15 +58,7 @@ export default function AssetImportPage() {
     [stores],
   )
 
-  const downloadTemplate = () => {
-    const blob = new Blob([`${TEMPLATE_HEADER}\n${TEMPLATE_EXAMPLE}\n`], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'assets-import-template.csv'
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+  const downloadTemplate = () => downloadCsv('assets-import-template.csv', TEMPLATE_HEADER, [TEMPLATE_EXAMPLE])
 
   const handleFile = async (file: File | null) => {
     if (!file) return

@@ -12,11 +12,12 @@ import { tapLight } from '@/lib/native/haptics'
 import type { AssetWithRelations } from '@/lib/supabase/database.types'
 import { QrCode, Plus, Printer, Upload, MapPin, ChevronRight, Search, Wrench, Truck } from 'lucide-react'
 
-type QuickFilter = 'all' | 'active' | 'in_repair' | 'no_coverage' | 'retired'
+type QuickFilter = 'all' | 'active' | 'pm_due' | 'in_repair' | 'no_coverage' | 'retired'
 
 const QUICK_FILTERS: { value: QuickFilter; label: string }[] = [
   { value: 'all',         label: 'All' },
   { value: 'active',      label: 'Active' },
+  { value: 'pm_due',      label: 'PM Due' },
   { value: 'in_repair',   label: 'In Repair' },
   { value: 'no_coverage', label: 'No Coverage' },
   { value: 'retired',     label: 'Retired' },
@@ -27,6 +28,7 @@ export default function AssetsPage() {
   const manager = canManageAssets(profile)
 
   const [assets, setAssets] = useState<AssetWithRelations[]>([])
+  const [pmDueIds, setPmDueIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [quick, setQuick] = useState<QuickFilter>('all')
   const [search, setSearch] = useState('')
@@ -41,6 +43,15 @@ export default function AssetsPage() {
       .select('*, category:asset_categories(*), store:stores(*), amc_vendor:vendors(*)')
       .order('created_at', { ascending: false })
     setAssets((data as unknown as AssetWithRelations[]) || [])
+
+    // Which assets have an overdue PM task (RLS scopes this too)
+    const { data: due } = await supabase
+      .from('asset_pm_tasks')
+      .select('asset_id')
+      .eq('is_active', true)
+      .lt('next_due_at', new Date().toISOString())
+    setPmDueIds(new Set(((due as { asset_id: string }[] | null) ?? []).map((d) => d.asset_id)))
+
     setLoading(false)
   }, [])
 
@@ -62,6 +73,7 @@ export default function AssetsPage() {
     if (quick === 'active' && a.status !== 'active') return false
     if (quick === 'in_repair' && a.status !== 'in_repair') return false
     if (quick === 'retired' && a.status !== 'retired') return false
+    if (quick === 'pm_due' && !pmDueIds.has(a.id)) return false
     if (quick === 'no_coverage' && (a.warranty_until || a.amc_until)) return false
     if (storeFilter && a.store_id !== storeFilter) return false
     if (categoryFilter && a.category_id !== categoryFilter) return false
@@ -71,7 +83,7 @@ export default function AssetsPage() {
       if (!hay.includes(q)) return false
     }
     return true
-  }), [assets, quick, search, storeFilter, categoryFilter])
+  }), [assets, quick, search, storeFilter, categoryFilter, pmDueIds])
 
   return (
     <AppShell
@@ -190,6 +202,11 @@ export default function AssetsPage() {
                     <span className="text-[10px] font-mono-value font-semibold text-[var(--text-muted)]">{a.asset_code}</span>
                     <AssetStatusBadge status={a.status} />
                     <CoverageBadge asset={a} />
+                    {pmDueIds.has(a.id) && (
+                      <span className="badge-pill inline-flex items-center gap-1" style={{ fontSize: 10, color: 'var(--color-warning)', background: 'rgba(234,179,8,0.10)', border: '1px solid rgba(234,179,8,0.30)', fontWeight: 700, letterSpacing: '0.03em', padding: '3px 8px' }}>
+                        <Wrench size={9} /> PM due
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-[14px] font-semibold text-[var(--text-primary)] truncate">{a.name}</h3>
                   <div className="flex items-center gap-3 flex-wrap mt-1 text-[11px] text-[var(--text-tertiary)]">

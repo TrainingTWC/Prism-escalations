@@ -7,6 +7,7 @@ import QRCode from 'qrcode'
 import { AppShell } from '@/components/layout/AppShell'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { AssetStatusBadge, CoverageBadge } from '@/components/assets/AssetBadges'
+import { PmPanel } from '@/components/assets/PmPanel'
 import { SeverityBadge, StatusPill } from '@/components/tickets/Badges'
 import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/auth.store'
@@ -174,6 +175,9 @@ function AssetViewInner() {
                 </p>
               )}
             </GlassPanel>
+
+            {/* Preventive maintenance */}
+            <PmPanel assetId={asset.id} canManage={manager} disabled={asset.status === 'retired'} />
 
             {/* Service history */}
             <GlassPanel

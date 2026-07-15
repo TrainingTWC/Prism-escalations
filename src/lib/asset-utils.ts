@@ -1,4 +1,4 @@
-import type { Asset, Profile } from '@/lib/supabase/database.types'
+import type { Asset, AssetPmTask, Profile } from '@/lib/supabase/database.types'
 
 // ─── Status ──────────────────────────────────────────────────────────────────
 
@@ -66,3 +66,27 @@ export function canManageAssets(profile: Profile | null): boolean {
   if (!profile) return false
   return ['super_admin', 'leadership', 'area_manager', 'store_manager'].includes(profile.role)
 }
+
+// ─── Preventive maintenance ──────────────────────────────────────────────────
+
+export type PmState = 'overdue' | 'due_soon' | 'scheduled' | 'no_schedule'
+
+const PM_DUE_SOON_DAYS = 3
+
+export function pmState(task: Pick<AssetPmTask, 'next_due_at'>): PmState {
+  if (!task.next_due_at) return 'no_schedule'
+  const due = new Date(task.next_due_at).getTime()
+  const now = Date.now()
+  if (due < now) return 'overdue'
+  if (due - now < PM_DUE_SOON_DAYS * 24 * 3600 * 1000) return 'due_soon'
+  return 'scheduled'
+}
+
+export const PM_STATE_META: Record<PmState, { label: string; color: string; bg: string }> = {
+  overdue:     { label: 'Overdue',    color: 'var(--color-danger)',  bg: 'rgba(239,68,68,0.10)' },
+  due_soon:    { label: 'Due soon',   color: 'var(--color-warning)', bg: 'rgba(234,179,8,0.10)' },
+  scheduled:   { label: 'Scheduled',  color: 'var(--color-success)', bg: 'rgba(34,197,94,0.10)' },
+  no_schedule: { label: 'One-off',    color: 'var(--text-muted)',    bg: 'rgba(122,122,136,0.10)' },
+}
+
+export const PM_DAYPARTS = ['opening', 'closing', 'anytime', 'weekly', 'monthly'] as const
