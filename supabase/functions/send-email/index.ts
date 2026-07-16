@@ -4,7 +4,8 @@
 // Called by Postgres (dispatch_email → pg_net) on ticket + asset events:
 //   Tickets: created · resolved · reopened · closed · rejected · blocked ·
 //            sla_breach · verify_reminder
-//   Assets:  coverage_expiring · coverage_expired · pm_due · vendor_dispatch
+//   Assets:  coverage_expiring · coverage_expired · pm_due · vendor_dispatch ·
+//            transfer_requested
 //
 // Auth: shared secret header (machine-to-machine), NOT a user JWT.
 //   Deploy:  supabase functions deploy send-email --no-verify-jwt
@@ -167,6 +168,19 @@ const EVENTS: Record<string, EventCopy> = {
     cta: null,
     tone: "#7C5CFF",
     card: "vendor",
+  },
+
+  // ── Inter-store asset transfers ──────────────────────────────────────────
+  transfer_requested: {
+    subject: (p) => `Transfer requested — ${p.asset.name}`,
+    headline: "Asset transfer requested",
+    intro: (p) =>
+      `A transfer has been requested for ${p.asset.name}: ${p.transfer.fromStore} → ${p.transfer.toStore}.` +
+      (p.transfer.notes ? ` Note: "${p.transfer.notes}"` : "") +
+      ` Open the asset to advance or cancel the transfer.`,
+    cta: "Review asset",
+    tone: "#7C5CFF",
+    card: "asset",
   },
 };
 

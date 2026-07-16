@@ -17,7 +17,7 @@ import type { AssetWithRelations, Ticket } from '@/lib/supabase/database.types'
 import { format, formatDistanceToNow } from 'date-fns'
 import {
   ArrowLeft, MapPin, Megaphone, Pencil, QrCode as QrIcon, History,
-  Wrench, CheckCircle2, Archive, Phone, Mail, Clock, Trash2,
+  Wrench, CheckCircle2, Archive, Phone, Mail, Clock, Trash2, ArrowLeftRight,
 } from 'lucide-react'
 
 function fmtDate(d: string | null): string {
@@ -35,6 +35,7 @@ function AssetViewInner() {
 
   const [asset, setAsset] = useState<AssetWithRelations | null>(null)
   const [tickets, setTickets] = useState<Ticket[]>([])
+  const [activeTransfer, setActiveTransfer] = useState<{ status: string; to_store: { store_name: string } | null } | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -60,6 +61,14 @@ function AssetViewInner() {
         .order('created_at', { ascending: false })
         .limit(20)
       setTickets((tkts as unknown as Ticket[]) || [])
+
+      const { data: xfer } = await supabase
+        .from('asset_transfers')
+        .select('status, to_store:stores!asset_transfers_to_store_id_fkey(store_name)')
+        .eq('asset_id', found.id)
+        .in('status', ['requested', 'in_transit'])
+        .maybeSingle()
+      setActiveTransfer((xfer as unknown as { status: string; to_store: { store_name: string } | null }) || null)
     }
     setLoading(false)
   }, [id, code])
@@ -286,6 +295,26 @@ function AssetViewInner() {
                 </div>
               )}
             </GlassPanel>
+
+            {/* Transfers */}
+            {manager && asset.status !== 'retired' && (
+              <GlassPanel padding="md" title={<span className="inline-flex items-center gap-1.5"><ArrowLeftRight size={13} /> Transfer</span>}>
+                {activeTransfer ? (
+                  <div className="px-3.5 py-3 rounded-[10px]" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)' }}>
+                    <p className="text-[12px] font-semibold text-[var(--text-secondary)]">
+                      {activeTransfer.status === 'in_transit' ? 'In transit to' : 'Requested to'} {activeTransfer.to_store?.store_name ?? '—'}
+                    </p>
+                    <Link href={`/assets/transfers`} className="text-[11px] text-[var(--accent)] font-semibold mt-1.5 inline-block">
+                      Manage transfer →
+                    </Link>
+                  </div>
+                ) : (
+                  <Link href={`/assets/transfers?asset=${asset.id}`} className="btn-ghost w-full justify-center" style={{ padding: '9px 12px', fontSize: 12 }}>
+                    <ArrowLeftRight size={13} /> Request transfer
+                  </Link>
+                )}
+              </GlassPanel>
+            )}
 
             {/* QR label */}
             <GlassPanel padding="md" title="QR Label">

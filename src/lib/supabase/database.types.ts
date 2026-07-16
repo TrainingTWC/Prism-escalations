@@ -462,6 +462,95 @@ export type Database = {
         }
       }
 
+      asset_transfers: {
+        Row: {
+          id: string
+          asset_id: string
+          from_store_id: string
+          to_store_id: string
+          status: string
+          requested_by: string | null
+          received_by: string | null
+          notes: string | null
+          requested_at: string
+          in_transit_at: string | null
+          received_at: string | null
+          cancelled_at: string | null
+        }
+        Insert: {
+          id?: string
+          asset_id: string
+          from_store_id: string
+          to_store_id: string
+          status?: string
+          requested_by?: string | null
+          received_by?: string | null
+          notes?: string | null
+          requested_at?: string
+        }
+        Update: {
+          status?: string
+          received_by?: string | null
+          notes?: string | null
+        }
+      }
+
+      spare_parts: {
+        Row: {
+          id: string
+          store_id: string
+          category_id: string | null
+          name: string
+          sku: string | null
+          qty_on_hand: number
+          reorder_threshold: number | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          store_id: string
+          category_id?: string | null
+          name: string
+          sku?: string | null
+          qty_on_hand?: number
+          reorder_threshold?: number | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          name?: string
+          sku?: string | null
+          qty_on_hand?: number
+          reorder_threshold?: number | null
+          notes?: string | null
+          updated_at?: string
+        }
+      }
+
+      spare_part_usage_log: {
+        Row: {
+          id: string
+          part_id: string
+          ticket_id: string | null
+          qty: number
+          used_by: string | null
+          used_at: string
+        }
+        Insert: {
+          id?: string
+          part_id: string
+          ticket_id?: string | null
+          qty: number
+          used_by?: string | null
+          used_at?: string
+        }
+        Update: Record<string, never>
+      }
+
       department_routing: {
         Row: {
           id: string
@@ -542,6 +631,9 @@ export type Vendor = Database['public']['Tables']['vendors']['Row']
 export type Asset = Database['public']['Tables']['assets']['Row']
 export type AssetPmTask = Database['public']['Tables']['asset_pm_tasks']['Row']
 export type AssetPmLog = Database['public']['Tables']['asset_pm_log']['Row']
+export type AssetTransfer = Database['public']['Tables']['asset_transfers']['Row']
+export type SparePart = Database['public']['Tables']['spare_parts']['Row']
+export type SparePartUsageLog = Database['public']['Tables']['spare_part_usage_log']['Row']
 
 export type AssetWithRelations = Asset & {
   category?: AssetCategory | null

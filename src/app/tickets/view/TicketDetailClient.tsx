@@ -17,13 +17,13 @@ import {
 import { applyTicketAction, setTicketBlocked } from '@/lib/ticket-actions'
 import { buzzSuccess, tapLight, tapMedium } from '@/lib/native/haptics'
 import { CoverageBadge } from '@/components/assets/AssetBadges'
-import type { TicketWithRelations, Comment, Escalation, Attachment, AssetWithRelations } from '@/lib/supabase/database.types'
+import type { TicketWithRelations, Comment, Escalation, Attachment, AssetWithRelations, SparePart } from '@/lib/supabase/database.types'
 import { formatDistanceToNow, format } from 'date-fns'
 import ReactMarkdown from 'react-markdown'
 import {
   ArrowLeft, MapPin, User, Clock, Send, AlertTriangle, Camera, X,
   CheckCircle, Sparkles, RefreshCw, ExternalLink, Trash2, Play,
-  BadgeCheck, OctagonAlert, Undo2, XCircle, QrCode, Phone,
+  BadgeCheck, OctagonAlert, Undo2, XCircle, QrCode, Phone, Package,
 } from 'lucide-react'
 
 type SheetKind = 'resolve' | 'block' | 'reopen' | 'reject' | null
@@ -51,6 +51,11 @@ function TicketDetailInner() {
   const [sheetPhotos, setSheetPhotos] = useState<File[]>([])
   const [sheetPreviews, setSheetPreviews] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Spare part used while fixing (store-scoped, independent of a linked asset)
+  const [storeParts, setStoreParts] = useState<SparePart[]>([])
+  const [usePartId, setUsePartId] = useState('')
+  const [usePartQty, setUsePartQty] = useState('1')
 
   const fetchAll = useCallback(async () => {
     if (!id) return
@@ -105,7 +110,13 @@ function TicketDetailInner() {
     sheetPreviews.forEach((u) => URL.revokeObjectURL(u))
     setSheetPhotos([])
     setSheetPreviews([])
+    setUsePartId('')
+    setUsePartQty('1')
     setSheet(kind)
+    if (kind === 'resolve' && ticket?.store_id) {
+      supabase.from('spare_parts').select('*').eq('store_id', ticket.store_id).order('name')
+        .then(({ data }) => setStoreParts((data as SparePart[]) || []))
+    }
   }
 
   const addSheetPhotos = (files: FileList | null) => {
@@ -148,6 +159,13 @@ function TicketDetailInner() {
     if (sheet === 'resolve') {
       setBusy(true)
       await uploadSheetPhotos()
+      if (usePartId && Number(usePartQty) > 0) {
+        await supabase.rpc('spare_part_use', {
+          p_part_id: usePartId,
+          p_qty: Number(usePartQty),
+          p_ticket_id: ticket.id,
+        } as never)
+      }
       setBusy(false)
       await runAction({ key: 'resolve', label: 'Mark fixed', nextStatus: 'resolved', tone: 'success' }, sheetNote)
     } else if (sheet === 'block') {
@@ -936,6 +954,32 @@ function TicketDetailInner() {
                   )}
                 </div>
               </>
+            )}
+
+            {sheet === 'resolve' && storeParts.length > 0 && (
+              <div className="mb-4">
+                <label className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-tertiary)] mb-1.5">
+                  <Package size={11} /> Used a spare part? (optional)
+                </label>
+                <div className="flex gap-2">
+                  <select value={usePartId} onChange={(e) => setUsePartId(e.target.value)} className="prism-input flex-1">
+                    <option value="">None</option>
+                    {storeParts.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.qty_on_hand} on hand)</option>
+                    ))}
+                  </select>
+                  {usePartId && (
+                    <input
+                      type="number"
+                      min="1"
+                      value={usePartQty}
+                      onChange={(e) => setUsePartQty(e.target.value)}
+                      className="prism-input"
+                      style={{ width: 64 }}
+                    />
+                  )}
+                </div>
+              </div>
             )}
 
             <button

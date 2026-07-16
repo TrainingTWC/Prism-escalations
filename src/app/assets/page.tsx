@@ -10,7 +10,7 @@ import { useAuthStore } from '@/store/auth.store'
 import { canManageAssets } from '@/lib/asset-utils'
 import { tapLight } from '@/lib/native/haptics'
 import type { AssetWithRelations } from '@/lib/supabase/database.types'
-import { QrCode, Plus, Printer, Upload, MapPin, ChevronRight, Search, Wrench, Truck, BarChart3 } from 'lucide-react'
+import { QrCode, Plus, Printer, Upload, MapPin, ChevronRight, Search, Wrench, Truck, BarChart3, ArrowLeftRight, Package } from 'lucide-react'
 
 type QuickFilter = 'all' | 'active' | 'pm_due' | 'in_repair' | 'no_coverage' | 'retired'
 
@@ -94,6 +94,12 @@ export default function AssetsPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <Link href="/assets/analytics" className="btn-ghost" style={{ padding: '7px 13px', fontSize: 12 }}>
             <BarChart3 size={13} /> Analytics
+          </Link>
+          <Link href="/assets/transfers" className="btn-ghost" style={{ padding: '7px 13px', fontSize: 12 }}>
+            <ArrowLeftRight size={13} /> Transfers
+          </Link>
+          <Link href="/assets/parts" className="btn-ghost" style={{ padding: '7px 13px', fontSize: 12 }}>
+            <Package size={13} /> Spare parts
           </Link>
           {manager && (<>
             <Link href="/assets/import" className="btn-ghost" style={{ padding: '7px 13px', fontSize: 12 }}>
