@@ -10,7 +10,7 @@ import { useAuthStore } from '@/store/auth.store'
 import { canManageAssets } from '@/lib/asset-utils'
 import { tapLight } from '@/lib/native/haptics'
 import type { AssetWithRelations } from '@/lib/supabase/database.types'
-import { QrCode, Plus, Printer, Upload, MapPin, ChevronRight, Search, Wrench, Truck } from 'lucide-react'
+import { QrCode, Plus, Printer, Upload, MapPin, ChevronRight, Search, Wrench, Truck, BarChart3 } from 'lucide-react'
 
 type QuickFilter = 'all' | 'active' | 'pm_due' | 'in_repair' | 'no_coverage' | 'retired'
 
@@ -91,8 +91,11 @@ export default function AssetsPage() {
       title="Assets"
       subtitle={`${visible.length} ${visible.length === 1 ? 'asset' : 'assets'} in your scope`}
       actions={
-        manager ? (
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link href="/assets/analytics" className="btn-ghost" style={{ padding: '7px 13px', fontSize: 12 }}>
+            <BarChart3 size={13} /> Analytics
+          </Link>
+          {manager && (<>
             <Link href="/assets/import" className="btn-ghost" style={{ padding: '7px 13px', fontSize: 12 }}>
               <Upload size={13} /> Import CSV
             </Link>
@@ -102,8 +105,8 @@ export default function AssetsPage() {
             <Link href="/assets/new" className="btn-primary" style={{ padding: '7px 14px', fontSize: 12 }}>
               <Plus size={13} strokeWidth={2.5} /> Add asset
             </Link>
-          </div>
-        ) : undefined
+          </>)}
+        </div>
       }
     >
       {/* Quick filter chips */}

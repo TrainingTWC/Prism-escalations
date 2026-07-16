@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import QRCode from 'qrcode'
 import { AppShell } from '@/components/layout/AppShell'
@@ -17,7 +17,7 @@ import type { AssetWithRelations, Ticket } from '@/lib/supabase/database.types'
 import { format, formatDistanceToNow } from 'date-fns'
 import {
   ArrowLeft, MapPin, Megaphone, Pencil, QrCode as QrIcon, History,
-  Wrench, CheckCircle2, Archive, Phone, Mail, Clock,
+  Wrench, CheckCircle2, Archive, Phone, Mail, Clock, Trash2,
 } from 'lucide-react'
 
 function fmtDate(d: string | null): string {
@@ -26,16 +26,21 @@ function fmtDate(d: string | null): string {
 
 function AssetViewInner() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const id = searchParams.get('id')
   const code = searchParams.get('code')
   const { profile } = useAuthStore()
   const manager = canManageAssets(profile)
+  const isSuperAdmin = profile?.role === 'super_admin'
 
   const [asset, setAsset] = useState<AssetWithRelations | null>(null)
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteErr, setDeleteErr] = useState('')
 
   const fetchAll = useCallback(async () => {
     if (!id && !code) { setLoading(false); return }
@@ -78,6 +83,21 @@ function AssetViewInner() {
     await supabase.from('assets').update({ status } as never).eq('id', asset.id)
     await fetchAll()
     setBusy(false)
+  }
+
+  const deleteAsset = async () => {
+    if (!asset || deleting) return
+    setDeleting(true)
+    setDeleteErr('')
+    // tickets.asset_id is ON DELETE SET NULL — past tickets survive, just unlinked.
+    // PM tasks/logs cascade away with the asset.
+    const { error } = await supabase.from('assets').delete().eq('id', asset.id)
+    if (error) {
+      setDeleteErr(error.message)
+      setDeleting(false)
+      return
+    }
+    router.push('/assets')
   }
 
   if (loading) {
@@ -343,6 +363,65 @@ function AssetViewInner() {
                     </button>
                   )}
                 </div>
+              </GlassPanel>
+            )}
+
+            {/* Super-admin delete */}
+            {isSuperAdmin && (
+              <GlassPanel padding="md">
+                {!confirmDelete ? (
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    className="w-full flex items-center justify-center gap-2 text-[12px] font-semibold rounded-[8px] py-2 transition-colors"
+                    style={{
+                      color: 'var(--color-danger)',
+                      background: 'rgba(239,68,68,0.07)',
+                      border: '1px solid rgba(239,68,68,0.20)',
+                    }}
+                  >
+                    <Trash2 size={13} />
+                    Delete Asset
+                  </button>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[11px] text-[var(--color-danger)] text-center font-semibold">
+                      Permanently delete this asset?
+                    </p>
+                    <p className="text-[10px] text-[var(--text-muted)] text-center">
+                      This cannot be undone. Its QR code stops resolving, and its maintenance
+                      schedule is removed. Past tickets stay — just unlinked from this asset.
+                    </p>
+                    {deleteErr && (
+                      <p className="text-[10px] text-[var(--color-danger)] text-center">{deleteErr}</p>
+                    )}
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        onClick={() => { setConfirmDelete(false); setDeleteErr('') }}
+                        disabled={deleting}
+                        className="flex-1 text-[11px] font-semibold rounded-[8px] py-1.5 transition-colors"
+                        style={{
+                          color: 'var(--text-secondary)',
+                          background: 'var(--bg-tertiary)',
+                          border: '1px solid var(--border-subtle)',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={deleteAsset}
+                        disabled={deleting}
+                        className="flex-1 text-[11px] font-bold rounded-[8px] py-1.5 transition-colors"
+                        style={{
+                          color: '#fff',
+                          background: 'var(--color-danger)',
+                          opacity: deleting ? 0.6 : 1,
+                        }}
+                      >
+                        {deleting ? 'Deleting…' : 'Yes, Delete'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </GlassPanel>
             )}
           </div>

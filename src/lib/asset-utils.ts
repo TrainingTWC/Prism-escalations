@@ -23,16 +23,18 @@ function dateState(until: string | null): CoverageState {
   return 'covered'
 }
 
-export function warrantyState(asset: Asset): CoverageState {
+type CoverageDates = Pick<Asset, 'warranty_until' | 'amc_until'>
+
+export function warrantyState(asset: CoverageDates): CoverageState {
   return dateState(asset.warranty_until)
 }
 
-export function amcState(asset: Asset): CoverageState {
+export function amcState(asset: CoverageDates): CoverageState {
   return dateState(asset.amc_until)
 }
 
 /** The asset's best current coverage — AMC wins over warranty when both exist. */
-export function coverageState(asset: Asset): { kind: 'amc' | 'warranty' | 'none'; state: CoverageState } {
+export function coverageState(asset: CoverageDates): { kind: 'amc' | 'warranty' | 'none'; state: CoverageState } {
   const amc = amcState(asset)
   if (amc === 'covered' || amc === 'expiring') return { kind: 'amc', state: amc }
   const warranty = warrantyState(asset)
