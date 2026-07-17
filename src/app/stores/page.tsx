@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { AppShell } from '@/components/layout/AppShell'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { supabase } from '@/lib/supabase/client'
+import { useCachedQuery } from '@/lib/use-cached-query'
 import { Building2, MapPin, Users, Layers, Search } from 'lucide-react'
 
 interface StoreRow {
@@ -24,38 +25,34 @@ interface EmpSlice {
 }
 
 export default function StoresPage() {
-  const [stores, setStores] = useState<StoreRow[]>([])
-  const [employees, setEmployees] = useState<EmpSlice[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [regionFilter, setRegionFilter] = useState('All')
 
-  useEffect(() => {
-    async function load() {
-      // Fetch stores (≤218 rows, no pagination needed)
-      const { data: storeData } = await supabase.from('stores').select('*').order('store_name')
-      setStores((storeData as StoreRow[]) ?? [])
+  const { data, loading } = useCachedQuery('stores:roster', async () => {
+    // Fetch stores (≤218 rows, no pagination needed)
+    const { data: storeData } = await supabase.from('stores').select('*').order('store_name')
 
-      // Paginate employee_roster in 1000-row pages (Supabase PostgREST default cap)
-      const PAGE = 1000
-      const allEmps: EmpSlice[] = []
-      let offset = 0
-      while (true) {
-        const { data: page } = await supabase
-          .from('employee_roster')
-          .select('emp_id, store_code, department, is_active')
-          .eq('is_active', true)
-          .range(offset, offset + PAGE - 1)
-        if (!page || page.length === 0) break
-        allEmps.push(...(page as EmpSlice[]))
-        if (page.length < PAGE) break
-        offset += PAGE
-      }
-      setEmployees(allEmps)
-      setLoading(false)
+    // Paginate employee_roster in 1000-row pages (Supabase PostgREST default cap)
+    const PAGE = 1000
+    const allEmps: EmpSlice[] = []
+    let offset = 0
+    while (true) {
+      const { data: page } = await supabase
+        .from('employee_roster')
+        .select('emp_id, store_code, department, is_active')
+        .eq('is_active', true)
+        .range(offset, offset + PAGE - 1)
+      if (!page || page.length === 0) break
+      allEmps.push(...(page as EmpSlice[]))
+      if (page.length < PAGE) break
+      offset += PAGE
     }
-    load()
-  }, [])
+
+    return { stores: (storeData as StoreRow[]) ?? [], employees: allEmps }
+  })
+
+  const stores = useMemo(() => data?.stores ?? [], [data])
+  const employees = useMemo(() => data?.employees ?? [], [data])
 
   // employees per store_code
   const empByStore = useMemo(() => {

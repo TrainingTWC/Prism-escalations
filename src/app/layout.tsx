@@ -3,6 +3,7 @@ import { JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/lib/theme-context'
 import { NativeBridge } from '@/components/native/NativeBridge'
+import { ZoomGuard } from '@/components/layout/ZoomGuard'
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body suppressHydrationWarning className={`${jetbrainsMono.className} antialiased`}>
         <ThemeProvider>{children}</ThemeProvider>
+        <ZoomGuard />
         <NativeBridge />
       </body>
     </html>

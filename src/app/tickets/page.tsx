@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { AppShell } from '@/components/layout/AppShell'
 import { TicketCard } from '@/components/tickets/TicketCard'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { FilterBar, FilterItem } from '@/components/ui/FilterBar'
 import { supabase } from '@/lib/supabase/client'
+import { useCachedQuery, invalidateCache } from '@/lib/use-cached-query'
 import { useAuthStore } from '@/store/auth.store'
 import { CATEGORY_LIST, SEVERITY_OPTIONS, STATUS_LABELS, normalizeStatus } from '@/lib/ticket-utils'
 import { tapLight } from '@/lib/native/haptics'
@@ -44,8 +45,6 @@ export default function TicketsPage() {
   const { profile } = useAuthStore()
   const isSuperAdmin = profile?.role === 'super_admin'
 
-  const [tickets, setTickets] = useState<TicketWithRelations[]>([])
-  const [loading, setLoading] = useState(true)
   const [quick, setQuick] = useState<QuickFilter>('active')
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
 
@@ -54,7 +53,10 @@ export default function TicketsPage() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const fetchTickets = useCallback(async () => {
+  // Only the server-applied filters belong in the key; the rest are client-side.
+  const cacheKey = `tickets:list:${filters.status}|${filters.severity}|${filters.category}|${filters.search}`
+
+  const { data, loading, revalidate, mutate } = useCachedQuery(cacheKey, async () => {
     // Visibility is enforced by RLS — each role only receives its own scope.
     let query = supabase
       .from('tickets')
@@ -67,18 +69,17 @@ export default function TicketsPage() {
     if (filters.search)   query = query.ilike('title', `%${filters.search}%`)
 
     const { data } = await query
-    setTickets((data as unknown as TicketWithRelations[]) || [])
-    setLoading(false)
-  }, [filters])
+    return (data as unknown as TicketWithRelations[]) || []
+  })
+  const tickets = useMemo(() => data ?? [], [data])
 
   useEffect(() => {
-    fetchTickets()
     const channel = supabase
       .channel('tickets-list')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, fetchTickets)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => { void revalidate() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [fetchTickets])
+  }, [revalidate])
 
   // Filter option lists, derived from the loaded tickets
   const storeOptions = useMemo(() => {
@@ -158,7 +159,9 @@ export default function TicketsPage() {
       setDeleting(false)
       return
     }
-    setTickets((prev) => prev.filter((t) => !selected.has(t.id)))
+    // Other cached filter combinations still hold the deleted rows.
+    invalidateCache('tickets:list:')
+    mutate((prev) => (prev ?? []).filter((t) => !selected.has(t.id)))
     exitSelectMode()
     setDeleting(false)
   }

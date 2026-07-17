@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { AppShell } from '@/components/layout/AppShell'
 import { supabase } from '@/lib/supabase/client'
+import { useCachedQuery } from '@/lib/use-cached-query'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -96,30 +97,24 @@ function KPI({ label, value, sub, icon, tone = 'var(--accent)' }: { label: strin
 
 // ─── page ─────────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
-  const [tickets, setTickets] = useState<TicketRow[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const load = async () => {
-      const PAGE = 1000
-      let offset = 0
-      const all: TicketRow[] = []
-      while (true) {
-        const { data } = await supabase
-          .from('tickets')
-          .select('id, category, severity, status, blocked, store_id, sla_deadline, resolved_at, closed_at, created_at, reopen_count, store:stores(store_name, store_code)')
-          .range(offset, offset + PAGE - 1)
-          .order('created_at', { ascending: false })
-        if (!data || data.length === 0) break
-        all.push(...(data as unknown as TicketRow[]))
-        if (data.length < PAGE) break
-        offset += PAGE
-      }
-      setTickets(all)
-      setLoading(false)
+  const { data, loading } = useCachedQuery('analytics:tickets', async () => {
+    const PAGE = 1000
+    let offset = 0
+    const all: TicketRow[] = []
+    while (true) {
+      const { data } = await supabase
+        .from('tickets')
+        .select('id, category, severity, status, blocked, store_id, sla_deadline, resolved_at, closed_at, created_at, reopen_count, store:stores(store_name, store_code)')
+        .range(offset, offset + PAGE - 1)
+        .order('created_at', { ascending: false })
+      if (!data || data.length === 0) break
+      all.push(...(data as unknown as TicketRow[]))
+      if (data.length < PAGE) break
+      offset += PAGE
     }
-    load()
-  }, [])
+    return all
+  })
+  const tickets = useMemo(() => data ?? [], [data])
 
   // ── derived metrics ──────────────────────────────────────────────────────
   const stats = useMemo(() => {

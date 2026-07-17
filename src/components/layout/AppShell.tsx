@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/auth.store'
+import { invalidateCache } from '@/lib/use-cached-query'
 import { SidebarProvider, useSidebar } from '@/lib/sidebar-context'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
@@ -29,27 +30,31 @@ export function AppShell(props: AppShellProps) {
 }
 
 function AppShellInner({ children, title, subtitle, overline, actions, bare = false }: AppShellProps) {
-  const { setProfile } = useAuthStore()
+  const loadProfile = useAuthStore((state) => state.loadProfile)
+  const clearAuth = useAuthStore((state) => state.clear)
   const router = useRouter()
   const { width } = useSidebar()
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+    let cancelled = false
 
-      const { data: profile } = await supabase
-        .from('profiles').select('*').eq('id', user.id).single()
-
-      setProfile(profile)
-    }
-    init()
+    // Cached after the first page — later navigations resolve without a round-trip.
+    void loadProfile().then((profile) => {
+      if (!cancelled && !profile) router.push('/login')
+    })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') router.push('/login')
+      if (event === 'SIGNED_OUT') {
+        // This path (e.g. session expiry) doesn't reload, so the in-memory
+        // query cache would otherwise outlive the session and be served to
+        // whoever signs in next.
+        invalidateCache()
+        clearAuth()
+        router.push('/login')
+      }
     })
-    return () => subscription.unsubscribe()
-  }, [setProfile, router])
+    return () => { cancelled = true; subscription.unsubscribe() }
+  }, [loadProfile, clearAuth, router])
 
   return (
     <div className="relative min-h-screen" style={{ background: 'var(--bg-primary)' }}>

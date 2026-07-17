@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
 import { AppShell } from '@/components/layout/AppShell'
 import { supabase } from '@/lib/supabase/client'
+import { useCachedQuery } from '@/lib/use-cached-query'
 import { normalizeSeverity } from '@/lib/ticket-utils'
 import type { TicketWithRelations } from '@/lib/supabase/database.types'
 import {
@@ -123,29 +124,25 @@ function InsightCard({ tone, title, detail, value }: { tone: string; title: stri
 }
 
 export default function DashboardPage() {
-  const [tickets, setTickets] = useState<TicketWithRelations[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data, loading, revalidate } = useCachedQuery('dashboard:tickets', async () => {
+    const { data } = await supabase
+      .from('tickets')
+      .select('*, store:stores(*), raised_by_profile:profiles!tickets_raised_by_fkey(*), assigned_to_profile:profiles!tickets_assigned_to_fkey(*), escalations(*)')
+      .order('created_at', { ascending: false })
+      .limit(30)
+
+    return (data as unknown as TicketWithRelations[]) || []
+  })
+  const tickets = useMemo(() => data ?? [], [data])
 
   useEffect(() => {
-    const fetchTickets = async () => {
-      const { data } = await supabase
-        .from('tickets')
-        .select('*, store:stores(*), raised_by_profile:profiles!tickets_raised_by_fkey(*), assigned_to_profile:profiles!tickets_assigned_to_fkey(*), escalations(*)')
-        .order('created_at', { ascending: false })
-        .limit(30)
-
-      setTickets((data as unknown as TicketWithRelations[]) || [])
-      setLoading(false)
-    }
-
-    fetchTickets()
     const channel = supabase
       .channel('dashboard-tickets')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, fetchTickets)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => { void revalidate() })
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [])
+  }, [revalidate])
 
   const metrics = useMemo(() => {
     const active = tickets.filter((ticket) => ticket.status !== 'closed' && ticket.status !== 'resolved' && ticket.status !== 'rejected')

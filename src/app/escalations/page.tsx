@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { AppShell } from '@/components/layout/AppShell'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { StatCard } from '@/components/ui/StatCard'
 import { SeverityBadge, StatusPill } from '@/components/tickets/Badges'
 import { supabase } from '@/lib/supabase/client'
+import { useCachedQuery } from '@/lib/use-cached-query'
 import { ESCALATION_LABELS } from '@/lib/ticket-utils'
 import { AlertTriangle, ArrowRight, CheckCircle, Shield, ShieldAlert, Siren, Crown } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -35,27 +36,23 @@ const LEVEL_META: Record<number, { color: string; icon: React.ReactNode }> = {
 }
 
 export default function EscalationsPage() {
-  const [escalations, setEscalations] = useState<EscalationRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data, loading, revalidate } = useCachedQuery('escalations:active', async () => {
+    const { data } = await supabase
+      .from('escalations')
+      .select(`*, ticket:tickets(*, store:stores(*))`)
+      .eq('resolved', false)
+      .order('triggered_at', { ascending: false })
+    return (data as unknown as EscalationRow[]) || []
+  })
+  const escalations = useMemo(() => data ?? [], [data])
 
   useEffect(() => {
-    const fetch = async () => {
-      const { data } = await supabase
-        .from('escalations')
-        .select(`*, ticket:tickets(*, store:stores(*))`)
-        .eq('resolved', false)
-        .order('triggered_at', { ascending: false })
-      setEscalations((data as unknown as EscalationRow[]) || [])
-      setLoading(false)
-    }
-    fetch()
-
     const channel = supabase
       .channel('escalations-page')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'escalations' }, fetch)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'escalations' }, () => { void revalidate() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [])
+  }, [revalidate])
 
   const byLevel = (level: number) => escalations.filter((e) => e.level === level)
 
