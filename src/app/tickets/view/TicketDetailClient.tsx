@@ -28,6 +28,11 @@ import {
 
 type SheetKind = 'resolve' | 'block' | 'reopen' | 'reject' | null
 
+type RungPerson = { id: string; name: string; email: string | null }
+type EscalationWithPeople = Escalation & {
+  policy?: { escalation_policy_people?: { profile: RungPerson | null }[] | null } | null
+}
+
 function TicketDetailInner() {
   const searchParams = useSearchParams()
   const id = searchParams.get('id')
@@ -36,7 +41,7 @@ function TicketDetailInner() {
   const [ticket, setTicket] = useState<TicketWithRelations | null>(null)
   const [asset, setAsset] = useState<AssetWithRelations | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
-  const [escalations, setEscalations] = useState<Escalation[]>([])
+  const [escalations, setEscalations] = useState<EscalationWithPeople[]>([])
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [loading, setLoading] = useState(true)
   const [comment, setComment] = useState('')
@@ -69,7 +74,10 @@ function TicketDetailInner() {
       .from('comments').select('*').eq('ticket_id', id).order('created_at', { ascending: true })
 
     const { data: escs } = await supabase
-      .from('escalations').select('*').eq('ticket_id', id).order('triggered_at', { ascending: true })
+      .from('escalations')
+      .select('*, policy:escalation_policies(escalation_policy_people(profile:profiles(id, name, email)))')
+      .eq('ticket_id', id)
+      .order('triggered_at', { ascending: true })
 
     const { data: atts } = await supabase
       .from('attachments').select('*').eq('ticket_id', id).order('created_at', { ascending: true })
@@ -88,7 +96,7 @@ function TicketDetailInner() {
 
     setTicket(tkt as unknown as TicketWithRelations)
     setComments(cmts || [])
-    setEscalations(escs || [])
+    setEscalations((escs as unknown as EscalationWithPeople[]) || [])
     setAttachments(atts || [])
     setLoading(false)
   }, [id])
@@ -627,6 +635,9 @@ function TicketDetailInner() {
                   {escalations.map((esc) => {
                     const color = esc.level >= 3 ? 'var(--color-danger)' : 'var(--color-warning)'
                     const bg    = esc.level >= 3 ? 'rgba(239,68,68,0.08)' : 'rgba(234,179,8,0.08)'
+                    const people = (esc.policy?.escalation_policy_people ?? [])
+                      .map((j) => j.profile)
+                      .filter((p): p is RungPerson => p != null)
                     return (
                       <div
                         key={esc.id}
@@ -634,7 +645,12 @@ function TicketDetailInner() {
                         style={{ background: bg, border: `1px solid ${color}33` }}
                       >
                         <div className="text-[12px] font-bold mb-0.5" style={{ color }}>
-                          Level {esc.level} — {ESCALATION_LABELS[esc.level]}
+                          Level {esc.level}
+                        </div>
+                        <div className="text-[11px] text-[var(--text-secondary)]">
+                          {people.length > 0
+                            ? `Notified: ${people.map((p) => p.name).join(', ')}`
+                            : (ESCALATION_LABELS[esc.level] ?? 'Escalation')}
                         </div>
                         <div className="text-[11px] text-[var(--text-muted)]">
                           {esc.reason.replace(/_/g, ' ')} · {formatDistanceToNow(new Date(esc.triggered_at), { addSuffix: true })}

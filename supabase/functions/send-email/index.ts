@@ -3,7 +3,7 @@
 //
 // Called by Postgres (dispatch_email → pg_net) on ticket + asset events:
 //   Tickets: created · resolved · reopened · closed · rejected · blocked ·
-//            sla_breach · verify_reminder
+//            sla_breach · verify_reminder · escalated
 //   Assets:  coverage_expiring · coverage_expired · pm_due · vendor_dispatch ·
 //            transfer_requested
 //
@@ -125,6 +125,15 @@ const EVENTS: Record<string, EventCopy> = {
       `This ${p.ticket.category} issue at ${p.ticket.store} was marked fixed ${p.resolvedAgoHours ?? "24"}+ hours ago and is waiting for you to verify. Unverified tickets auto-close after 7 days.`,
     cta: "Verify now",
     tone: "#EAB308",
+    card: "ticket",
+  },
+  escalated: {
+    subject: (p) => `Escalation L${p.level} — ${p.ticket.code}: ${p.ticket.title}`,
+    headline: "Escalated to you",
+    intro: (p) =>
+      `This ${p.ticket.severity} ${p.ticket.category} issue at ${p.ticket.store} passed its SLA deadline and has reached escalation level ${p.level}. You've been looped in to help drive it to resolution — it stays with its current owner, but it now needs your attention.`,
+    cta: "View ticket",
+    tone: "#EF4444",
     card: "ticket",
   },
 

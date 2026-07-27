@@ -9,8 +9,10 @@ import { SeverityBadge, StatusPill } from '@/components/tickets/Badges'
 import { supabase } from '@/lib/supabase/client'
 import { useCachedQuery } from '@/lib/use-cached-query'
 import { ESCALATION_LABELS } from '@/lib/ticket-utils'
-import { AlertTriangle, ArrowRight, CheckCircle, Shield, ShieldAlert, Siren, Crown } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle, Shield, ShieldAlert, Siren, Crown, Users } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+
+interface EscalationPerson { id: string; name: string; email: string | null }
 
 interface EscalationRow {
   id: string
@@ -19,6 +21,7 @@ interface EscalationRow {
   triggered_at: string
   resolved: boolean
   ticket_id: string
+  policy_id: string | null
   ticket?: {
     id: string
     title: string
@@ -26,6 +29,17 @@ interface EscalationRow {
     status: string
     store?: { store_name: string }
   } | null
+  // The people looped in at this rung, via policy → join → profiles.
+  policy?: {
+    escalation_policy_people?: { profile: EscalationPerson | null }[] | null
+  } | null
+}
+
+/** The named people on an escalation rung (empty for legacy/manual rows). */
+function rungPeople(esc: EscalationRow): EscalationPerson[] {
+  return (esc.policy?.escalation_policy_people ?? [])
+    .map((j) => j.profile)
+    .filter((p): p is EscalationPerson => p != null)
 }
 
 const LEVEL_META: Record<number, { color: string; icon: React.ReactNode }> = {
@@ -39,7 +53,7 @@ export default function EscalationsPage() {
   const { data, loading, revalidate } = useCachedQuery('escalations:active', async () => {
     const { data } = await supabase
       .from('escalations')
-      .select(`*, ticket:tickets(*, store:stores(*))`)
+      .select(`*, ticket:tickets(*, store:stores(*)), policy:escalation_policies(escalation_policy_people(profile:profiles(id, name, email)))`)
       .eq('resolved', false)
       .order('triggered_at', { ascending: false })
     return (data as unknown as EscalationRow[]) || []
@@ -97,11 +111,12 @@ export default function EscalationsPage() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {escalations.map((esc, i) => {
-            const meta = LEVEL_META[esc.level] ?? LEVEL_META[1]
+            const meta = LEVEL_META[esc.level] ?? LEVEL_META[4]
+            const people = rungPeople(esc)
             return (
               <Link
                 key={esc.id}
-                href={`/tickets/${esc.ticket_id}`}
+                href={`/tickets/view?id=${esc.ticket_id}`}
                 className="block animate-fadeInUp"
                 style={{ animationDelay: `${i * 40}ms`, textDecoration: 'none' }}
               >
@@ -121,7 +136,7 @@ export default function EscalationsPage() {
                         className="text-[11px] font-bold uppercase tracking-[0.05em]"
                         style={{ color: meta.color }}
                       >
-                        Level {esc.level} — {ESCALATION_LABELS[esc.level]}
+                        Level {esc.level}
                       </span>
                       {esc.ticket && <SeverityBadge severity={esc.ticket.severity} />}
                       {esc.ticket && <StatusPill status={esc.ticket.status} />}
@@ -129,9 +144,16 @@ export default function EscalationsPage() {
                     <div className="text-sm font-semibold text-[var(--text-primary)] truncate">
                       {esc.ticket?.title || 'Unknown ticket'}
                     </div>
-                    <div className="text-xs text-[var(--text-muted)] mt-0.5">
-                      {esc.reason.replace(/_/g, ' ')} · {formatDistanceToNow(new Date(esc.triggered_at), { addSuffix: true })}
-                      {esc.ticket?.store && ` · ${esc.ticket.store.store_name}`}
+                    <div className="text-xs text-[var(--text-muted)] mt-0.5 flex items-center gap-1 flex-wrap">
+                      {people.length > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-[var(--text-secondary)]">
+                          <Users size={11} /> {people.map((p) => p.name).join(', ')}
+                        </span>
+                      ) : (
+                        <span>{ESCALATION_LABELS[esc.level] ?? 'Escalation'}</span>
+                      )}
+                      <span>· {esc.reason.replace(/_/g, ' ')} · {formatDistanceToNow(new Date(esc.triggered_at), { addSuffix: true })}</span>
+                      {esc.ticket?.store && <span>· {esc.ticket.store.store_name}</span>}
                     </div>
                   </div>
                   <ArrowRight size={14} className="text-[var(--text-muted)]" />
