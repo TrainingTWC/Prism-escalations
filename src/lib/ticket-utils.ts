@@ -81,6 +81,33 @@ export const ESCALATION_LABELS: Record<number, string> = {
   4: 'Leadership',
 }
 
+/**
+ * Human label for an escalation rung's timing. `afterMinutes` is measured from
+ * the ticket's SLA deadline (the matrix is anchored on breach), so 0 = the
+ * moment of breach and everything else is time past it.
+ */
+export function formatEscalationDelay(afterMinutes: number): string {
+  if (afterMinutes <= 0) return 'At SLA breach'
+  if (afterMinutes < 60) return `${afterMinutes}m after breach`
+  const hours = afterMinutes / 60
+  if (hours < 24) {
+    return Number.isInteger(hours) ? `${hours}h after breach` : `${(afterMinutes / 60).toFixed(1)}h after breach`
+  }
+  const days = afterMinutes / 1440
+  return Number.isInteger(days) ? `${days}d after breach` : `${days.toFixed(1)}d after breach`
+}
+
+/** Preset delays offered in the escalation matrix editor (minutes after breach). */
+export const ESCALATION_DELAY_PRESETS: { minutes: number; label: string }[] = [
+  { minutes: 0,    label: 'At SLA breach' },
+  { minutes: 60,   label: '1 hour after breach' },
+  { minutes: 120,  label: '2 hours after breach' },
+  { minutes: 240,  label: '4 hours after breach' },
+  { minutes: 480,  label: '8 hours after breach' },
+  { minutes: 1440, label: '1 day after breach' },
+  { minutes: 2880, label: '2 days after breach' },
+]
+
 // ─── Status flow: open → in_progress → resolved → closed (+ rejected) ───────
 // "Blocked" is a flag on an in-progress ticket, not a status.
 

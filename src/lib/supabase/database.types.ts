@@ -216,6 +216,7 @@ export type Database = {
           triggered_by: string | null
           reason: string
           resolved: boolean
+          policy_id: string | null
           created_at: string
         }
         Insert: {
@@ -226,6 +227,7 @@ export type Database = {
           triggered_by?: string | null
           reason: string
           resolved?: boolean
+          policy_id?: string | null
           created_at?: string
         }
         Update: {
@@ -233,6 +235,7 @@ export type Database = {
           triggered_by?: string | null
           reason?: string
           resolved?: boolean
+          policy_id?: string | null
         }
       }
       comments: {
@@ -579,6 +582,57 @@ export type Database = {
         }
       }
 
+      escalation_policies: {
+        Row: {
+          id: string
+          department: string
+          region: string | null
+          severity: string | null
+          level: number
+          after_minutes: number
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          department: string
+          region?: string | null
+          severity?: string | null
+          level: number
+          after_minutes?: number
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          department?: string
+          region?: string | null
+          severity?: string | null
+          level?: number
+          after_minutes?: number
+          is_active?: boolean
+          updated_at?: string
+        }
+      }
+
+      escalation_policy_people: {
+        Row: {
+          policy_id: string
+          profile_id: string
+          created_at: string
+        }
+        Insert: {
+          policy_id: string
+          profile_id: string
+          created_at?: string
+        }
+        Update: {
+          policy_id?: string
+          profile_id?: string
+        }
+      }
+
       employee_roster: {
         Row: {
           id: string
@@ -626,6 +680,8 @@ export type Database = {
 
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type DepartmentRouting = Database['public']['Tables']['department_routing']['Row']
+export type EscalationPolicy = Database['public']['Tables']['escalation_policies']['Row']
+export type EscalationPolicyPerson = Database['public']['Tables']['escalation_policy_people']['Row']
 export type AssetCategory = Database['public']['Tables']['asset_categories']['Row']
 export type Vendor = Database['public']['Tables']['vendors']['Row']
 export type Asset = Database['public']['Tables']['assets']['Row']
@@ -653,4 +709,9 @@ export type TicketWithRelations = Ticket & {
   assigned_to_profile?: Profile | null
   escalations?: Escalation[]
   comments?: Comment[]
+}
+
+// A ladder rung plus the specific people looped in at it (matrix editor).
+export type EscalationPolicyWithPeople = EscalationPolicy & {
+  people: Pick<Profile, 'id' | 'name' | 'email' | 'department' | 'role'>[]
 }

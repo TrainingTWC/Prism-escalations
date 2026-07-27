@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import {
   LayoutDashboard, Ticket, Store, Users, BarChart3,
-  AlertTriangle, ChevronLeft, Home, Brain, Search, Route, QrCode,
+  AlertTriangle, ChevronLeft, Home, Brain, Search, Route, QrCode, GitBranch,
 } from 'lucide-react'
 import { useSidebar, SIDEBAR_WIDTH, SIDEBAR_WIDTH_COLLAPSED } from '@/lib/sidebar-context'
 import { cn } from '@/lib/cn'
@@ -27,9 +27,10 @@ const PRIMARY_NAV: NavItem[] = [
 ]
 
 const ADMIN_NAV: NavItem[] = [
-  { href: '/stores',  icon: Store, label: 'Stores' },
-  { href: '/team',    icon: Users, label: 'Team' },
-  { href: '/routing', icon: Route, label: 'Routing' },
+  { href: '/stores',            icon: Store,     label: 'Stores' },
+  { href: '/team',              icon: Users,     label: 'Team' },
+  { href: '/routing',           icon: Route,     label: 'Routing' },
+  { href: '/escalation-matrix', icon: GitBranch, label: 'Escalation Matrix' },
 ]
 
 export function Sidebar() {
