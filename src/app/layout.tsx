@@ -35,11 +35,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning className={jetbrainsMono.variable}>
       <head>
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" href="/prism-logo.png" type="image/png" />
-        <link rel="shortcut icon" href="/prism-logo.png" type="image/png" />
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" href="/favicon.ico?v=2" sizes="any" />
+        <link rel="icon" href="/prism-logo.png?v=2" type="image/png" />
+        <link rel="shortcut icon" href="/prism-logo.png?v=2" type="image/png" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png?v=2" />
+        <link rel="manifest" href="/manifest.json?v=2" />
         {/* Restore deep-link path saved by 404.html SPA redirect before React hydrates */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){var r=sessionStorage.getItem('spa_redirect');if(r){sessionStorage.removeItem('spa_redirect');history.replaceState(null,'',r);}})();` }} />
       </head>

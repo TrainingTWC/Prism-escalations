@@ -7,7 +7,7 @@ export function PrismLogo({ size = 36, className }: PrismLogoProps) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="/prism-logo.png"
+      src="/prism-logo.png?v=2"
       width={size}
       height={size}
       className={className}
