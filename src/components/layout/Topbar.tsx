@@ -64,11 +64,11 @@ export function Topbar() {
           <span>New Ticket</span>
         </Link>
 
-        {/* Theme */}
+        {/* Theme (desktop; the mobile menu sheet carries this) */}
         <button
           onClick={toggleTheme}
           aria-label="Toggle theme"
-          className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors"
+          className="w-9 h-9 rounded-lg hidden lg:flex items-center justify-center transition-colors"
           style={{
             background: 'var(--card-bg)',
             border: '1px solid var(--border-subtle)',
@@ -84,18 +84,22 @@ export function Topbar() {
         {/* User */}
         {profile && (
           <div
-            className="flex items-center gap-2 pl-3 ml-1"
+            className="flex items-center gap-2 pl-2 lg:pl-3 ml-1"
             style={{ borderLeft: '1px solid var(--border-subtle)' }}
           >
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold"
+            {/* On phones this is the way into the account page — the standalone
+                account/sign-out buttons collapse into the bottom-nav menu. */}
+            <Link
+              href="/team"
+              aria-label="Account"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0"
               style={{
                 background: 'linear-gradient(135deg, var(--color-ember-500) 0%, var(--color-ember-400) 100%)',
                 color: '#1A0E05',
               }}
             >
               {profile.name.charAt(0).toUpperCase()}
-            </div>
+            </Link>
             <div className="hidden md:block text-left leading-tight">
               <div className="text-[12px] font-semibold text-[var(--text-primary)] truncate max-w-[140px]">
                 {profile.name}
@@ -109,7 +113,7 @@ export function Topbar() {
               href="/team"
               aria-label="Account"
               title="Account"
-              className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors"
+              className="w-9 h-9 rounded-lg hidden lg:flex items-center justify-center transition-colors"
               style={{
                 background: 'var(--card-bg)',
                 border: '1px solid var(--border-subtle)',
@@ -123,7 +127,7 @@ export function Topbar() {
               onClick={signOut}
               aria-label="Sign out"
               title="Sign out"
-              className="w-9 h-9 rounded-lg flex items-center justify-center transition-colors hover:text-[var(--color-danger)]"
+              className="w-9 h-9 rounded-lg hidden lg:flex items-center justify-center transition-colors hover:text-[var(--color-danger)]"
               style={{
                 background: 'var(--card-bg)',
                 border: '1px solid var(--border-subtle)',

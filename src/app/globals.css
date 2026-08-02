@@ -243,6 +243,24 @@ html.light .glass-interactive:hover {
   transform: translateY(-2px);
 }
 
+/* Home module cards. Hover lives behind `hover: hover` so a tap on a phone
+   doesn't leave the card stuck in its hovered state. */
+.module-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-subtle);
+  transition:
+    background 200ms var(--ease-out-expo),
+    border-color 200ms var(--ease-out-expo),
+    transform 200ms var(--ease-out-expo);
+}
+@media (hover: hover) {
+  .module-card:hover {
+    background: var(--card-bg-hover);
+    border-color: var(--accent-border);
+  }
+}
+.module-card:active { transform: scale(0.985); }
+
 .widget {
   background: linear-gradient(135deg, rgba(20, 20, 24, 0.9) 0%, rgba(16, 16, 20, 0.85) 100%);
   -webkit-backdrop-filter: blur(20px) saturate(1.3);
