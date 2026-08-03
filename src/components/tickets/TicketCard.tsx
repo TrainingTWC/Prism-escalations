@@ -45,12 +45,12 @@ export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }
     >
       {/* ── Left stub: department label, colour-coded ───────────────── */}
       <div
-        className="relative shrink-0 w-[40px] flex flex-col items-center justify-between py-3"
+        className="relative shrink-0 w-[30px] lg:w-[40px] flex flex-col items-center justify-between py-3"
         style={{ background: stub }}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-white/80" />
         <span
-          className="font-black uppercase text-white text-[10px] tracking-[0.22em] whitespace-nowrap"
+          className="font-black uppercase text-white text-[9px] lg:text-[10px] tracking-[0.14em] lg:tracking-[0.22em] whitespace-nowrap"
           style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
         >
           {ticket.category}
@@ -78,7 +78,7 @@ export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }
       </div>
 
       {/* ── Body ────────────────────────────────────────────────────── */}
-      <div className={cn('flex-1 min-w-0 px-5 py-4', selectable && 'pr-9')}>
+      <div className={cn('flex-1 min-w-0 px-3.5 py-3.5 lg:px-5 lg:py-4', selectable && 'pr-9')}>
         {/* Checkbox overlay */}
         {selectable && (
           <div className="absolute top-3.5 right-4 z-10">
@@ -91,7 +91,7 @@ export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             {/* Top row */}
-            <div className="flex items-center gap-2 flex-wrap mb-2">
+            <div className="flex items-center gap-1.5 lg:gap-2 flex-wrap mb-1.5 lg:mb-2">
               <span className="text-[11px] font-mono-value text-[var(--text-muted)] font-semibold">
                 #{ticket.ticket_code}
               </span>
@@ -104,42 +104,58 @@ export function TicketCard({ ticket, index = 0, selectable, selected, onToggle }
               {ticket.intelligence_pattern_flag && <PatternBadge />}
             </div>
 
-            {/* Title */}
-            <h3 className="text-[14px] font-semibold text-[var(--text-primary)] mb-1.5 truncate">
+            {/* Two lines rather than truncate — at phone width a single
+                truncated line showed almost none of the title. */}
+            <h3 className="text-[14px] font-semibold text-[var(--text-primary)] leading-snug mb-2 lg:mb-1.5 line-clamp-2">
               {ticket.title}
             </h3>
 
-            {/* Meta row */}
-            <div className="flex items-center gap-4 flex-wrap text-xs text-[var(--text-tertiary)]">
-              {ticket.store && (
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin size={11} className="text-[var(--accent)]" />
-                  <span className="text-[var(--text-secondary)]">{ticket.store.store_name}</span>
-                  <span className="text-[var(--text-muted)]">· {ticket.store.region}</span>
+            {/* Store — the primary "where", so it gets its own line and real weight */}
+            {ticket.store && (
+              <div className="flex items-center gap-1.5 mb-1.5 min-w-0">
+                <MapPin size={12} className="text-[var(--accent)] shrink-0" />
+                <span className="text-[13px] font-semibold text-[var(--text-primary)] truncate">
+                  {ticket.store.store_name}
                 </span>
-              )}
-              {ticket.raised_by_profile && (
-                <span className="inline-flex items-center gap-1.5">
-                  <User size={11} />
-                  {ticket.raised_by_profile.name}
+                {ticket.store.region && (
+                  <span className="text-[11px] font-medium text-[var(--text-tertiary)] shrink-0">
+                    · {ticket.store.region}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Footer: who + when, with the SLA pill on phones (desktop has a column) */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 flex-wrap min-w-0 text-[11px] text-[var(--text-muted)]">
+                {ticket.raised_by_profile && (
+                  <span className="inline-flex items-center gap-1.5 min-w-0">
+                    <User size={11} className="shrink-0" />
+                    <span className="truncate">{ticket.raised_by_profile.name}</span>
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5 shrink-0">
+                  <Clock size={11} />
+                  {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}
                 </span>
+              </div>
+              {!isClosed && (
+                <div className="shrink-0 lg:hidden">
+                  <SlaCountdown deadline={ticket.sla_deadline} compact />
+                </div>
               )}
-              <span className="inline-flex items-center gap-1.5 text-[var(--text-muted)]">
-                <Clock size={11} />
-                {formatDistanceToNow(new Date(ticket.created_at), { addSuffix: true })}
-              </span>
             </div>
           </div>
 
-          {/* Right: SLA + arrow */}
+          {/* Right: SLA + arrow (desktop — on phones both are inlined above) */}
           {!selectable && (
-            <div className="flex flex-col items-end gap-2 shrink-0">
+            <div className="hidden lg:flex flex-col items-end gap-2 shrink-0">
               {!isClosed && <SlaCountdown deadline={ticket.sla_deadline} compact />}
               <ChevronRight size={14} className="text-[var(--text-muted)]" />
             </div>
           )}
           {selectable && !isClosed && (
-            <div className="shrink-0">
+            <div className="hidden lg:block shrink-0">
               <SlaCountdown deadline={ticket.sla_deadline} compact />
             </div>
           )}

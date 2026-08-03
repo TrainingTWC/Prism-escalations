@@ -364,12 +364,16 @@ function TicketDetailInner() {
                 </div>
               )}
 
-              <div className="flex gap-5 flex-wrap text-[13px]">
+              <div className="flex gap-x-5 gap-y-2 flex-wrap text-[13px]">
                 {ticket.store && (
-                  <span className="inline-flex items-center gap-1.5 text-[var(--text-secondary)]">
-                    <MapPin size={12} className="text-[var(--accent)]" />
-                    {ticket.store.store_name}
-                    <span className="text-[var(--text-muted)]">· {ticket.store.region}</span>
+                  <span className="inline-flex items-center gap-1.5 min-w-0">
+                    <MapPin size={13} className="text-[var(--accent)] shrink-0" />
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      {ticket.store.store_name}
+                    </span>
+                    <span className="text-[11px] font-medium text-[var(--text-tertiary)]">
+                      · {ticket.store.region}
+                    </span>
                   </span>
                 )}
                 {ticket.raised_by_profile && (

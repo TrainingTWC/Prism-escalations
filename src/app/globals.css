@@ -891,7 +891,18 @@ html.light .prism-premium-dashboard {
 .premium-table-row:hover { background: var(--premium-row-hover); }
 .premium-table-row:last-child { border-bottom: 0; }
 .premium-table-row strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.premium-store-cell { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--premium-muted); font-size: 11px; }
+/* Store is the thing people scan this table for — keep it at full ink weight
+   rather than the muted tone the other secondary cells use. */
+.premium-store-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--premium-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.premium-store-cell svg { color: var(--premium-accent); flex-shrink: 0; }
 
 .premium-text-link {
   color: var(--premium-accent);

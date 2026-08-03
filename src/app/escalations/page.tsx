@@ -9,7 +9,7 @@ import { SeverityBadge, StatusPill } from '@/components/tickets/Badges'
 import { supabase } from '@/lib/supabase/client'
 import { useCachedQuery } from '@/lib/use-cached-query'
 import { ESCALATION_LABELS } from '@/lib/ticket-utils'
-import { AlertTriangle, ArrowRight, CheckCircle, Shield, ShieldAlert, Siren, Crown, Users } from 'lucide-react'
+import { AlertTriangle, ArrowRight, CheckCircle, Shield, ShieldAlert, Siren, Crown, Users, MapPin } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 interface EscalationPerson { id: string; name: string; email: string | null }
@@ -144,6 +144,16 @@ export default function EscalationsPage() {
                     <div className="text-sm font-semibold text-[var(--text-primary)] truncate">
                       {esc.ticket?.title || 'Unknown ticket'}
                     </div>
+                    {/* Store on its own line — it was the last item in a muted
+                        run-on and effectively invisible when scanning. */}
+                    {esc.ticket?.store && (
+                      <div className="flex items-center gap-1.5 mt-1 min-w-0">
+                        <MapPin size={12} className="text-[var(--accent)] shrink-0" />
+                        <span className="text-[13px] font-semibold text-[var(--text-primary)] truncate">
+                          {esc.ticket.store.store_name}
+                        </span>
+                      </div>
+                    )}
                     <div className="text-xs text-[var(--text-muted)] mt-0.5 flex items-center gap-1 flex-wrap">
                       {people.length > 0 ? (
                         <span className="inline-flex items-center gap-1 text-[var(--text-secondary)]">
@@ -153,7 +163,6 @@ export default function EscalationsPage() {
                         <span>{ESCALATION_LABELS[esc.level] ?? 'Escalation'}</span>
                       )}
                       <span>· {esc.reason.replace(/_/g, ' ')} · {formatDistanceToNow(new Date(esc.triggered_at), { addSuffix: true })}</span>
-                      {esc.ticket?.store && <span>· {esc.ticket.store.store_name}</span>}
                     </div>
                   </div>
                   <ArrowRight size={14} className="text-[var(--text-muted)]" />

@@ -34,6 +34,9 @@ const STATUS_CONFIG: Record<string, { color: string; bg: string }> = {
 export function SeverityBadge({ severity, size = 'sm' }: SeverityBadgeProps) {
   const cfg = SEVERITY_CONFIG[severity] ?? SEVERITY_CONFIG.P2
   const fontSize = size === 'sm' ? 10 : 11
+  // "P0 · Critical" is too wide for a phone-width badge row — narrow screens
+  // get the code alone, which is what people scan for anyway.
+  const [code, word] = cfg.label.split(' · ')
   return (
     <span
       className="badge-pill"
@@ -49,7 +52,10 @@ export function SeverityBadge({ severity, size = 'sm' }: SeverityBadgeProps) {
       }}
     >
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.color }} />
-      {cfg.label}
+      <span>
+        {code}
+        {word && <span className="hidden sm:inline"> · {word}</span>}
+      </span>
     </span>
   )
 }

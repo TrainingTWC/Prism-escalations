@@ -310,38 +310,44 @@ export default function TicketsPage() {
           <p className="text-xs text-[var(--text-muted)]">{hasFilters || quick !== 'all' ? 'Try a different filter' : 'Create your first ticket to get started'}</p>
         </GlassPanel>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3" style={{ paddingBottom: selectMode ? 96 : 0 }}>
+        <div className={`grid grid-cols-1 xl:grid-cols-2 gap-3 ${selectMode ? 'pb-28 lg:pb-24' : ''}`}>
           {visibleTickets.map((ticket, i) => (
             <TicketCard key={ticket.id} ticket={ticket} index={i} selectable={selectMode} selected={selected.has(ticket.id)} onToggle={toggleOne} />
           ))}
         </div>
       )}
 
+      {/* Floats above the mobile tab bar — at bottom-0 it sat underneath it */}
       {selectMode && selected.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4" style={{ background: 'var(--card-bg)', borderTop: '1px solid var(--border-primary)', backdropFilter: 'blur(16px)' }}>
-          {!confirmDelete ? (
-            <>
-              <span className="text-[13px] font-semibold text-[var(--text-primary)]">{selected.size} ticket{selected.size > 1 ? 's' : ''} selected</span>
-              <div className="flex items-center gap-3">
-                <button onClick={exitSelectMode} className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" style={{ border: '1px solid var(--border-subtle)' }}>
-                  <X size={13} /> Cancel
-                </button>
-                <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 px-4 py-1.5 rounded-[8px] text-[12px] font-bold" style={{ background: 'var(--color-danger)18', border: '1px solid var(--color-danger)44', color: 'var(--color-danger)' }}>
-                  <Trash2 size={13} /> Delete {selected.size} ticket{selected.size > 1 ? 's' : ''}
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <span className="text-[13px] font-semibold" style={{ color: 'var(--color-danger)' }}>Permanently delete {selected.size} ticket{selected.size > 1 ? 's' : ''}? This cannot be undone.</span>
-              <div className="flex items-center gap-3">
-                <button onClick={() => setConfirmDelete(false)} className="px-3 py-1.5 rounded-[8px] text-[12px] font-semibold text-[var(--text-muted)]" style={{ border: '1px solid var(--border-subtle)' }}>Cancel</button>
-                <button onClick={handleDelete} disabled={deleting} className="flex items-center gap-1.5 px-4 py-1.5 rounded-[8px] text-[12px] font-bold" style={{ background: 'var(--color-danger)', color: '#fff', opacity: deleting ? 0.6 : 1 }}>
-                  <Trash2 size={13} /> {deleting ? 'Deleting...' : 'Confirm delete'}
-                </button>
-              </div>
-            </>
-          )}
+        <div className="fixed left-0 right-0 z-[55] px-4 lg:px-10 bottom-[calc(env(safe-area-inset-bottom)+74px)] lg:bottom-6 pointer-events-none">
+          <div
+            className="max-w-[620px] mx-auto rounded-2xl px-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 pointer-events-auto animate-fadeInUp"
+            style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', boxShadow: '0 12px 36px rgba(0,0,0,0.35)' }}
+          >
+            {!confirmDelete ? (
+              <>
+                <span className="text-[12px] font-semibold flex-1 min-w-0 truncate text-[var(--text-primary)] px-1">{selected.size} ticket{selected.size > 1 ? 's' : ''} selected</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={exitSelectMode} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-[10px] text-[12px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" style={{ border: '1px solid var(--border-subtle)' }}>
+                    <X size={13} /> Cancel
+                  </button>
+                  <button onClick={() => setConfirmDelete(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[12px] font-bold" style={{ background: 'var(--color-danger)18', border: '1px solid var(--color-danger)44', color: 'var(--color-danger)' }}>
+                    <Trash2 size={13} /> Delete {selected.size}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="text-[12px] font-semibold flex-1 min-w-0 px-1" style={{ color: 'var(--color-danger)' }}>Permanently delete {selected.size} ticket{selected.size > 1 ? 's' : ''}? This cannot be undone.</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button onClick={() => setConfirmDelete(false)} className="flex-1 sm:flex-none px-3 py-2 rounded-[10px] text-[12px] font-semibold text-[var(--text-muted)]" style={{ border: '1px solid var(--border-subtle)' }}>Cancel</button>
+                  <button onClick={handleDelete} disabled={deleting} className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[12px] font-bold" style={{ background: 'var(--color-danger)', color: '#fff', opacity: deleting ? 0.6 : 1 }}>
+                    <Trash2 size={13} /> {deleting ? 'Deleting...' : 'Confirm'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </AppShell>
