@@ -618,18 +618,23 @@ export type Database = {
 
       escalation_policy_people: {
         Row: {
+          id: string
           policy_id: string
-          profile_id: string
+          profile_id: string | null
+          employee_roster_id: string | null
           created_at: string
         }
         Insert: {
+          id?: string
           policy_id: string
-          profile_id: string
+          profile_id?: string | null
+          employee_roster_id?: string | null
           created_at?: string
         }
         Update: {
           policy_id?: string
-          profile_id?: string
+          profile_id?: string | null
+          employee_roster_id?: string | null
         }
       }
 

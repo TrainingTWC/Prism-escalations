@@ -30,7 +30,7 @@ type SheetKind = 'resolve' | 'block' | 'reopen' | 'reject' | null
 
 type RungPerson = { id: string; name: string; email: string | null }
 type EscalationWithPeople = Escalation & {
-  policy?: { escalation_policy_people?: { profile: RungPerson | null }[] | null } | null
+  policy?: { escalation_policy_people?: { profile: RungPerson | null; employee: RungPerson | null }[] | null } | null
 }
 
 function TicketDetailInner() {
@@ -75,7 +75,7 @@ function TicketDetailInner() {
 
     const { data: escs } = await supabase
       .from('escalations')
-      .select('*, policy:escalation_policies(escalation_policy_people(profile:profiles(id, name, email)))')
+      .select('*, policy:escalation_policies(escalation_policy_people(profile:profiles(id, name, email), employee:employee_roster(id, name, email)))')
       .eq('ticket_id', id)
       .order('triggered_at', { ascending: true })
 
@@ -640,7 +640,7 @@ function TicketDetailInner() {
                     const color = esc.level >= 3 ? 'var(--color-danger)' : 'var(--color-warning)'
                     const bg    = esc.level >= 3 ? 'rgba(239,68,68,0.08)' : 'rgba(234,179,8,0.08)'
                     const people = (esc.policy?.escalation_policy_people ?? [])
-                      .map((j) => j.profile)
+                      .map((j) => j.profile ?? j.employee)
                       .filter((p): p is RungPerson => p != null)
                     return (
                       <div

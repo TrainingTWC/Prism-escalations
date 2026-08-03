@@ -29,16 +29,16 @@ interface EscalationRow {
     status: string
     store?: { store_name: string }
   } | null
-  // The people looped in at this rung, via policy → join → profiles.
+  // The people looped in at this rung, via policy → join → profiles/employee_roster.
   policy?: {
-    escalation_policy_people?: { profile: EscalationPerson | null }[] | null
+    escalation_policy_people?: { profile: EscalationPerson | null; employee: EscalationPerson | null }[] | null
   } | null
 }
 
 /** The named people on an escalation rung (empty for legacy/manual rows). */
 function rungPeople(esc: EscalationRow): EscalationPerson[] {
   return (esc.policy?.escalation_policy_people ?? [])
-    .map((j) => j.profile)
+    .map((j) => j.profile ?? j.employee)
     .filter((p): p is EscalationPerson => p != null)
 }
 
@@ -53,7 +53,7 @@ export default function EscalationsPage() {
   const { data, loading, revalidate } = useCachedQuery('escalations:active', async () => {
     const { data } = await supabase
       .from('escalations')
-      .select(`*, ticket:tickets(*, store:stores(*)), policy:escalation_policies(escalation_policy_people(profile:profiles(id, name, email)))`)
+      .select(`*, ticket:tickets(*, store:stores(*)), policy:escalation_policies(escalation_policy_people(profile:profiles(id, name, email), employee:employee_roster(id, name, email)))`)
       .eq('resolved', false)
       .order('triggered_at', { ascending: false })
     return (data as unknown as EscalationRow[]) || []
