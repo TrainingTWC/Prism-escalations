@@ -3,9 +3,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { AppShell } from '@/components/layout/AppShell'
 import { GlassPanel } from '@/components/ui/GlassPanel'
+import { Button } from '@/components/ui/Button'
 import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/auth.store'
-import { Users, ShieldCheck, Building2, RefreshCw, Check, ChevronDown } from 'lucide-react'
+import {
+  Users, ShieldCheck, Building2, RefreshCw, Check, ChevronDown, UserPlus, AlertCircle, CheckCircle2,
+} from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 const ROLES = [
@@ -196,6 +199,7 @@ function ScopeEditor({
 export default function TeamPage() {
   const { profile: self } = useAuthStore()
   const isSuperAdmin = self?.role === 'super_admin'
+  const canInvite = isSuperAdmin || self?.role === 'leadership'
 
   const [profiles, setProfiles] = useState<ProfileRow[]>([])
   const [stores, setStores] = useState<{ id: string; store_name: string; store_code: string }[]>([])
@@ -274,6 +278,11 @@ export default function TeamPage() {
             <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Auto-syncs every 5 days</p>
           </GlassPanel>
         </div>
+
+        {/* Invite a dashboard user */}
+        {canInvite && (
+          <InvitePanel stores={stores} regions={regions} callerRole={self?.role ?? ''} onInvited={fetchAll} />
+        )}
 
         {/* Role breakdown */}
         <GlassPanel padding="md" title="Role distribution">
@@ -424,6 +433,178 @@ export default function TeamPage() {
 
       </div>
     </AppShell>
+  )
+}
+
+const DEFAULT_INVITE_FORM = { name: '', email: '', role: 'store_team', department: '', region: '', store_id: '' }
+
+function InvitePanel({
+  stores, regions, callerRole, onInvited,
+}: {
+  stores: { id: string; store_name: string; store_code: string }[]
+  regions: string[]
+  callerRole: string
+  onInvited: () => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState(DEFAULT_INVITE_FORM)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const invitableRoles = callerRole === 'super_admin' ? ROLES : ROLES.filter((r) => r.value !== 'super_admin')
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.name.trim() || !form.email.trim() || sending) return
+    setSending(true)
+    setError('')
+    setSuccess('')
+
+    const { data, error: fnErr } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>('invite-user', {
+      body: {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        role: form.role,
+        department: form.role === 'dept_owner' ? (form.department || null) : null,
+        region: form.role === 'area_manager' ? (form.region || null) : null,
+        store_id: (form.role === 'store_team' || form.role === 'store_manager') ? (form.store_id || null) : null,
+      },
+    })
+
+    let message = data?.error ?? fnErr?.message
+    if (!message && fnErr) {
+      const ctx = (fnErr as unknown as { context?: Response }).context
+      if (ctx) {
+        try { message = (await ctx.json())?.error } catch { /* ignore */ }
+      }
+    }
+
+    if (message) {
+      setError(message)
+      setSending(false)
+      return
+    }
+
+    setSuccess(`Invite sent to ${form.email}`)
+    setForm(DEFAULT_INVITE_FORM)
+    setSending(false)
+    await onInvited()
+  }
+
+  return (
+    <GlassPanel padding="md">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[var(--text-primary)]">
+          <UserPlus size={13} /> Invite a dashboard user
+        </span>
+        <ChevronDown size={14} className="text-[var(--text-muted)] transition-transform" style={{ transform: open ? 'rotate(180deg)' : undefined }} />
+      </button>
+
+      {open && (
+        <form onSubmit={submit} className="flex flex-col gap-3 mt-4">
+          <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+            Sends a Supabase invite email — they click the link and set their own password.
+            Once accepted they&apos;re assignable as a routing owner or escalation contact right away.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Name</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Full name"
+                className="prism-input"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Email</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="name@thirdwavecoffee.in"
+                className="prism-input"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Role</label>
+            <select
+              value={form.role}
+              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value, department: '', region: '', store_id: '' }))}
+              className="prism-input"
+            >
+              {invitableRoles.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+
+          {form.role === 'dept_owner' && (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Department</label>
+              <select
+                value={form.department}
+                onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
+                className="prism-input"
+              >
+                <option value="">No department</option>
+                {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+          )}
+          {form.role === 'area_manager' && (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Region</label>
+              <select
+                value={form.region}
+                onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))}
+                className="prism-input"
+              >
+                <option value="">No region</option>
+                {regions.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+          )}
+          {(form.role === 'store_team' || form.role === 'store_manager') && (
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Store</label>
+              <select
+                value={form.store_id}
+                onChange={(e) => setForm((f) => ({ ...f, store_id: e.target.value }))}
+                className="prism-input"
+              >
+                <option value="">No store</option>
+                {stores.map((s) => <option key={s.id} value={s.id}>{s.store_name} · {s.store_code}</option>)}
+              </select>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg"
+                 style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.20)' }}>
+              <AlertCircle size={13} className="text-[var(--color-danger)] shrink-0 mt-0.5" />
+              <span className="text-[11px] text-[var(--color-danger)]">{error}</span>
+            </div>
+          )}
+          {success && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                 style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+              <CheckCircle2 size={13} style={{ color: 'var(--color-success)' }} />
+              <span className="text-[11px] text-[var(--text-secondary)]">{success}</span>
+            </div>
+          )}
+
+          <Button type="submit" variant="primary" disabled={sending || !form.name.trim() || !form.email.trim()} className="justify-center">
+            <UserPlus size={14} /> {sending ? 'Sending…' : 'Send invite'}
+          </Button>
+        </form>
+      )}
+    </GlassPanel>
   )
 }
 
