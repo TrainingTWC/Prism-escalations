@@ -559,6 +559,7 @@ export type Database = {
           id: string
           department: string
           region: string | null
+          store_id: string | null
           owner_id: string
           is_active: boolean
           created_at: string
@@ -568,6 +569,7 @@ export type Database = {
           id?: string
           department: string
           region?: string | null
+          store_id?: string | null
           owner_id: string
           is_active?: boolean
           created_at?: string
@@ -576,6 +578,7 @@ export type Database = {
         Update: {
           department?: string
           region?: string | null
+          store_id?: string | null
           owner_id?: string
           is_active?: boolean
           updated_at?: string
@@ -587,6 +590,7 @@ export type Database = {
           id: string
           department: string
           region: string | null
+          store_id: string | null
           severity: string | null
           level: number
           after_minutes: number
@@ -598,6 +602,7 @@ export type Database = {
           id?: string
           department: string
           region?: string | null
+          store_id?: string | null
           severity?: string | null
           level: number
           after_minutes?: number
@@ -608,6 +613,7 @@ export type Database = {
         Update: {
           department?: string
           region?: string | null
+          store_id?: string | null
           severity?: string | null
           level?: number
           after_minutes?: number

@@ -11,9 +11,9 @@ import { parseCsv, downloadCsv } from '@/lib/csv'
 import {
   CATEGORY_LIST, SEVERITY_OPTIONS, ESCALATION_DELAY_PRESETS, formatEscalationDelay,
 } from '@/lib/ticket-utils'
-import type { EscalationPolicy } from '@/lib/supabase/database.types'
+import type { EscalationPolicy, Store } from '@/lib/supabase/database.types'
 import {
-  GitBranch, Plus, Trash2, Globe2, MapPin, AlertCircle, Clock, Users, Check, Search, ShieldAlert,
+  GitBranch, Plus, Trash2, Globe2, MapPin, Building2, AlertCircle, Clock, Users, Check, Search, ShieldAlert,
   Upload, Download, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle,
 } from 'lucide-react'
 
@@ -27,15 +27,20 @@ type Person = {
   role: string | null
   source: 'profile' | 'roster'
 }
+type StoreOption = Pick<Store, 'id' | 'store_name' | 'store_code' | 'region'>
 type PolicyRow = EscalationPolicy & { people: Person[] }
 
 const LEVELS = [1, 2, 3, 4, 5, 6]
 const PEOPLE_PREVIEW_LIMIT = 60
 
-/** Lowest level (1..6) not yet used for this exact department/region/severity scope. */
-function nextLevelFor(rows: PolicyRow[], department: string, region: string, severity: string): number {
+/** Lowest level (1..6) not yet used for this exact department/store-or-region/severity scope. */
+function nextLevelFor(rows: PolicyRow[], department: string, region: string, storeId: string, severity: string): number {
   const used = rows
-    .filter((r) => r.department === department && (r.region ?? '') === region && (r.severity ?? '') === severity)
+    .filter((r) =>
+      r.department === department
+      && (r.store_id ?? '') === storeId
+      && (storeId || (r.region ?? '') === region)
+      && (r.severity ?? '') === severity)
     .map((r) => r.level)
   return LEVELS.find((l) => !used.includes(l)) ?? 1
 }
@@ -53,6 +58,7 @@ export default function EscalationMatrixPage() {
   const [form, setForm] = useState({
     department: CATEGORY_LIST[0],
     region: '',
+    store_id: '',
     severity: '',
     level: 1,
     after_minutes: 0,
@@ -61,7 +67,7 @@ export default function EscalationMatrixPage() {
   const [peopleSearch, setPeopleSearch] = useState('')
 
   const { data, loading, revalidate } = useCachedQuery('escalation-matrix', async () => {
-    const [{ data: policies }, { data: profs }, { data: roster }, { data: stores }] = await Promise.all([
+    const [{ data: policies }, { data: profs }, { data: roster }, { data: storeRows }] = await Promise.all([
       supabase
         .from('escalation_policies')
         .select(`*, escalation_policy_people(
@@ -72,7 +78,7 @@ export default function EscalationMatrixPage() {
         .order('level'),
       supabase.from('profiles').select('id, name, email, department, role').eq('status', 'active').order('name'),
       supabase.from('employee_roster').select('id, name, email, department').eq('is_active', true).order('name'),
-      supabase.from('stores').select('region'),
+      supabase.from('stores').select('id, store_name, store_code, region').order('store_name'),
     ])
 
     type RawProfilePerson = { id: string; name: string; email: string | null; department: string | null; role: string | null }
@@ -103,19 +109,22 @@ export default function EscalationMatrixPage() {
     const rosterPeople = rosterPeopleRaw.filter((r) => !r.email || !profileEmails.has(r.email.toLowerCase()))
     const people = [...profilePeople, ...rosterPeople]
 
-    const regions = Array.from(new Set(((stores ?? []) as { region: string }[]).map((s) => s.region))).sort()
-    return { rows, people, regions }
+    const stores = (storeRows as StoreOption[] | null) ?? []
+    const regions = Array.from(new Set(stores.map((s) => s.region))).sort()
+    return { rows, people, stores, regions }
   })
 
   const rows = useMemo(() => data?.rows ?? [], [data])
   const people = useMemo(() => data?.people ?? [], [data])
+  const stores = useMemo(() => data?.stores ?? [], [data])
   const regions = useMemo(() => data?.regions ?? [], [data])
+  const storesById = useMemo(() => new Map(stores.map((s) => [s.id, s])), [stores])
 
   // Changing the scope re-suggests the next free level (event-driven, not an effect).
   const updateScope = (patch: Partial<typeof form>) => {
     setForm((f) => {
       const next = { ...f, ...patch }
-      next.level = nextLevelFor(rows, next.department, next.region, next.severity)
+      next.level = nextLevelFor(rows, next.department, next.region, next.store_id, next.severity)
       return next
     })
   }
@@ -146,6 +155,10 @@ export default function EscalationMatrixPage() {
     })
   }
 
+  const scopeLabel = form.store_id
+    ? storesById.get(form.store_id)?.store_name ?? 'this store'
+    : form.region || 'all regions'
+
   const addRung = async (e: React.FormEvent) => {
     e.preventDefault()
     if (selected.size === 0 || saving) return
@@ -156,7 +169,9 @@ export default function EscalationMatrixPage() {
       .from('escalation_policies')
       .insert({
         department: form.department,
-        region: form.region || null,
+        // A store rung ignores region — the store's own region is implicit.
+        region: form.store_id ? null : (form.region || null),
+        store_id: form.store_id || null,
         severity: form.severity || null,
         level: form.level,
         after_minutes: form.after_minutes,
@@ -166,11 +181,14 @@ export default function EscalationMatrixPage() {
 
     if (insErr || !policy) {
       setError(
-        insErr?.message.includes('escalation_policies_unique')
+        insErr?.message.includes('escalation_policies_store_uniq')
           ? `Level ${form.level} already exists for ${form.department}`
-            + `${form.severity ? ` · ${form.severity}` : ''}`
-            + `${form.region ? ` · ${form.region}` : ' (all regions)'} — delete it first.`
-          : insErr?.message ?? 'Could not create the rung.',
+            + `${form.severity ? ` · ${form.severity}` : ''} at ${scopeLabel} — delete it first.`
+          : insErr?.message.includes('escalation_policies_region_uniq')
+            ? `Level ${form.level} already exists for ${form.department}`
+              + `${form.severity ? ` · ${form.severity}` : ''}`
+              + `${form.region ? ` · ${form.region}` : ' (all regions)'} — delete it first.`
+            : insErr?.message ?? 'Could not create the rung.',
       )
       setSaving(false)
       return
@@ -241,8 +259,10 @@ export default function EscalationMatrixPage() {
                     <label className={labelClass}>Region</label>
                     <select
                       value={form.region}
+                      disabled={!!form.store_id}
                       onChange={(e) => updateScope({ region: e.target.value })}
                       className="prism-input"
+                      style={form.store_id ? { opacity: 0.5 } : undefined}
                     >
                       <option value="">All regions</option>
                       {regions.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -259,6 +279,20 @@ export default function EscalationMatrixPage() {
                       {SEVERITY_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.value}</option>)}
                     </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Store (optional — overrides region)</label>
+                  <select
+                    value={form.store_id}
+                    onChange={(e) => updateScope({ store_id: e.target.value })}
+                    className="prism-input"
+                  >
+                    <option value="">No store override</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>{s.store_name} · {s.store_code}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -359,7 +393,7 @@ export default function EscalationMatrixPage() {
               </form>
             </GlassPanel>
 
-            <BulkImportPanel people={people} regions={regions} existingRows={rows} onImported={revalidate} />
+            <BulkImportPanel people={people} stores={stores} regions={regions} existingRows={rows} onImported={revalidate} />
           </div>
         )}
 
@@ -390,6 +424,7 @@ export default function EscalationMatrixPage() {
                       || (a.region ?? '').localeCompare(b.region ?? ''))
                     .map((r) => {
                       const sev = SEVERITY_OPTIONS.find((s) => s.value === r.severity)
+                      const store = r.store_id ? storesById.get(r.store_id) : null
                       return (
                         <div
                           key={r.id}
@@ -409,8 +444,8 @@ export default function EscalationMatrixPage() {
                                   <Clock size={11} /> {formatEscalationDelay(r.after_minutes)}
                                 </span>
                                 <span className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
-                                  {r.region ? <MapPin size={11} /> : <Globe2 size={11} />}
-                                  {r.region ?? 'All regions'}
+                                  {store ? <Building2 size={11} /> : r.region ? <MapPin size={11} /> : <Globe2 size={11} />}
+                                  {store ? `${store.store_name} · ${store.store_code}` : (r.region ?? 'All regions')}
                                 </span>
                                 {sev && (
                                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
@@ -477,15 +512,16 @@ export default function EscalationMatrixPage() {
 // Bulk import — CSV upload for adding many rungs at once
 // ─────────────────────────────────────────────────────────────────────────
 
-const CSV_HEADER = 'department,region,severity,level,after_minutes,people_emails'
+const CSV_HEADER = 'department,store_code,region,severity,level,after_minutes,people_emails'
 const CSV_EXAMPLES = [
-  'Operations,,P0,1,0,area.manager@thirdwavecoffee.in;ops.head@thirdwavecoffee.in',
-  'IT,,,2,120,it.lead@thirdwavecoffee.in',
+  'Operations,,,P0,1,0,area.manager@thirdwavecoffee.in;ops.head@thirdwavecoffee.in',
+  'IT,IND-001,,,2,120,it.lead@thirdwavecoffee.in',
 ]
 
 interface CsvRow {
   line: number
   department: string
+  storeCode: string
   region: string
   severity: string
   levelRaw: string
@@ -493,14 +529,16 @@ interface CsvRow {
   peopleRaw: string
   level?: number
   after_minutes?: number
+  storeId?: string
   matchedPeople: Person[]
   problem?: string
 }
 
 function BulkImportPanel({
-  people, regions, existingRows, onImported,
+  people, stores, regions, existingRows, onImported,
 }: {
   people: Person[]
+  stores: StoreOption[]
   regions: string[]
   existingRows: PolicyRow[]
   onImported: () => Promise<void>
@@ -519,9 +557,10 @@ function BulkImportPanel({
   }, [people])
   const regionSet = useMemo(() => new Map(regions.map((r) => [r.toLowerCase(), r])), [regions])
   const deptSet = useMemo(() => new Map(CATEGORY_LIST.map((d) => [d.toLowerCase(), d])), [])
+  const storeByCode = useMemo(() => new Map(stores.map((s) => [s.store_code.toLowerCase(), s])), [stores])
 
   const existingCombos = useMemo(() => new Set(
-    existingRows.map((r) => `${r.department}|${(r.region ?? '').toLowerCase()}|${r.severity ?? ''}|${r.level}`),
+    existingRows.map((r) => `${r.department}|${r.store_id ?? ''}|${(r.region ?? '').toLowerCase()}|${r.severity ?? ''}|${r.level}`),
   ), [existingRows])
 
   const downloadTemplate = () => downloadCsv('escalation-matrix-template.csv', CSV_HEADER, CSV_EXAMPLES)
@@ -536,7 +575,7 @@ function BulkImportPanel({
 
     const header = parsed[0].map((h) => h.toLowerCase().trim())
     const idx = (col: string) => header.indexOf(col)
-    const iDept = idx('department'), iRegion = idx('region'), iSev = idx('severity')
+    const iDept = idx('department'), iStore = idx('store_code'), iRegion = idx('region'), iSev = idx('severity')
     const iLevel = idx('level'), iAfter = idx('after_minutes'), iPeople = idx('people_emails')
 
     const seenInFile = new Set<string>()
@@ -546,6 +585,7 @@ function BulkImportPanel({
       const r: CsvRow = {
         line: n + 2,
         department: get(iDept),
+        storeCode: get(iStore),
         region: get(iRegion),
         severity: get(iSev),
         levelRaw: get(iLevel),
@@ -555,7 +595,9 @@ function BulkImportPanel({
       }
 
       const deptCanon = deptSet.get(r.department.toLowerCase())
-      const regionCanon = r.region ? regionSet.get(r.region.toLowerCase()) : ''
+      const storeMatch = r.storeCode ? storeByCode.get(r.storeCode.toLowerCase()) : undefined
+      // A store scope ignores region — the store's own region is implicit.
+      const regionCanon = r.storeCode ? '' : (r.region ? regionSet.get(r.region.toLowerCase()) : '')
       const severity = r.severity.toUpperCase()
       const level = Number(r.levelRaw)
       const afterMinutes = r.afterMinutesRaw === '' ? 0 : Number(r.afterMinutesRaw)
@@ -565,6 +607,7 @@ function BulkImportPanel({
 
       r.department = deptCanon ?? r.department
       r.region = regionCanon ?? r.region
+      r.storeId = storeMatch?.id
       r.severity = severity
       r.level = level
       r.after_minutes = afterMinutes
@@ -572,7 +615,9 @@ function BulkImportPanel({
 
       if (!deptCanon) {
         r.problem = `Unknown department "${r.department}"`
-      } else if (r.region && !regionCanon) {
+      } else if (r.storeCode && !storeMatch) {
+        r.problem = `Unknown store code "${r.storeCode}"`
+      } else if (r.region && !r.storeCode && !regionCanon) {
         r.problem = `Unknown region "${r.region}"`
       } else if (severity && !SEVERITY_OPTIONS.some((s) => s.value === severity)) {
         r.problem = `Unknown severity "${severity}" (use P0–P3 or leave blank)`
@@ -585,9 +630,10 @@ function BulkImportPanel({
       } else if (unmatched.length > 0) {
         r.problem = `No match for: ${unmatched.join(', ')}`
       } else {
-        const combo = `${deptCanon}|${(regionCanon ?? '').toLowerCase()}|${severity}|${level}`
+        const combo = `${deptCanon}|${r.storeId ?? ''}|${(regionCanon ?? '').toLowerCase()}|${severity}|${level}`
         if (existingCombos.has(combo)) {
-          r.problem = `Level ${level} already exists for ${deptCanon}${severity ? ` · ${severity}` : ''}${regionCanon ? ` · ${regionCanon}` : ' (all regions)'} — skipped`
+          r.problem = `Level ${level} already exists for ${deptCanon}${severity ? ` · ${severity}` : ''}`
+            + `${storeMatch ? ` · ${storeMatch.store_name}` : regionCanon ? ` · ${regionCanon}` : ' (all regions)'} — skipped`
         } else if (seenInFile.has(combo)) {
           r.problem = 'Duplicate row in this file — skipped'
         } else {
@@ -614,6 +660,7 @@ function BulkImportPanel({
         .insert({
           department: r.department,
           region: r.region || null,
+          store_id: r.storeId ?? null,
           severity: r.severity || null,
           level: r.level!,
           after_minutes: r.after_minutes!,
@@ -662,7 +709,8 @@ function BulkImportPanel({
         <div className="flex flex-col gap-3 mt-4">
           <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
             Add many rungs at once — download the template, fill it in, then upload it.
-            Region and severity blank mean &ldquo;all&rdquo;; <code className="font-mono-value text-[11px]">people_emails</code> is
+            Store, region and severity blank mean &ldquo;all&rdquo;; a store code overrides region.
+            {' '}<code className="font-mono-value text-[11px]">people_emails</code> is
             {' '}a semicolon-separated list, matched against dashboard users and the Prism Platform employee roster by email.
           </p>
 
@@ -718,7 +766,7 @@ function BulkImportPanel({
                          style={{ borderTop: '1px solid var(--border-subtle)' }}>
                       <span className="font-semibold text-[var(--text-primary)] shrink-0">L{r.level}</span>
                       <span className="text-[var(--text-secondary)] truncate">
-                        {r.department}{r.severity ? ` · ${r.severity}` : ''} · {r.region || 'All regions'}
+                        {r.department}{r.severity ? ` · ${r.severity}` : ''} · {r.storeId ? r.storeCode : (r.region || 'All regions')}
                       </span>
                       <span className="text-[var(--text-muted)] shrink-0 ml-auto">{r.matchedPeople.length} people</span>
                     </div>

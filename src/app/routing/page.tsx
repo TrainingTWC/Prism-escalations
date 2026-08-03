@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/Button'
 import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/auth.store'
 import { CATEGORY_LIST } from '@/lib/ticket-utils'
-import type { DepartmentRouting, Profile } from '@/lib/supabase/database.types'
-import { Route, Plus, Trash2, Globe2, MapPin, AlertCircle } from 'lucide-react'
+import type { DepartmentRouting, Profile, Store } from '@/lib/supabase/database.types'
+import { Route, Plus, Trash2, Globe2, MapPin, Building2, AlertCircle } from 'lucide-react'
 
+type StoreOption = Pick<Store, 'id' | 'store_name' | 'store_code' | 'region'>
 type RoutingRow = DepartmentRouting & { owner?: Pick<Profile, 'id' | 'name' | 'email'> | null }
 
 export default function RoutingPage() {
@@ -18,18 +19,18 @@ export default function RoutingPage() {
 
   const [rows, setRows] = useState<RoutingRow[]>([])
   const [people, setPeople] = useState<Pick<Profile, 'id' | 'name' | 'email' | 'department' | 'role'>[]>([])
-  const [regions, setRegions] = useState<string[]>([])
+  const [stores, setStores] = useState<StoreOption[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const [form, setForm] = useState({ department: 'Maintenance', region: '', owner_id: '' })
+  const [form, setForm] = useState({ department: 'Maintenance', region: '', store_id: '', owner_id: '' })
 
   const fetchAll = useCallback(async () => {
-    const [{ data: routing }, { data: profs }, { data: stores }] = await Promise.all([
+    const [{ data: routing }, { data: profs }, { data: storeRows }] = await Promise.all([
       supabase.from('department_routing').select('*').order('department'),
       supabase.from('profiles').select('id, name, email, department, role').eq('status', 'active').order('name'),
-      supabase.from('stores').select('region'),
+      supabase.from('stores').select('id, store_name, store_code, region').order('store_name'),
     ])
 
     const profMap = new Map((profs ?? []).map((p) => [p.id, p]))
@@ -38,11 +39,14 @@ export default function RoutingPage() {
       owner: profMap.get(r.owner_id) ?? null,
     })))
     setPeople((profs as typeof people | null) ?? [])
-    setRegions(Array.from(new Set(((stores ?? []) as { region: string }[]).map((s) => s.region))).sort())
+    setStores((storeRows as StoreOption[] | null) ?? [])
     setLoading(false)
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  const regions = useMemo(() => Array.from(new Set(stores.map((s) => s.region))).sort(), [stores])
+  const storesById = useMemo(() => new Map(stores.map((s) => [s.id, s])), [stores])
 
   // Owner suggestions: people in the picked department first, then everyone
   const ownerOptions = useMemo(() => {
@@ -51,6 +55,10 @@ export default function RoutingPage() {
     return { inDept, others }
   }, [people, form.department])
 
+  const scopeLabel = form.store_id
+    ? storesById.get(form.store_id)?.store_name ?? 'this store'
+    : form.region || 'all regions (when no region rule matches)'
+
   const addRule = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.owner_id || saving) return
@@ -58,13 +66,19 @@ export default function RoutingPage() {
     setError('')
     const { error: err } = await supabase.from('department_routing').insert({
       department: form.department,
-      region: form.region || null,
+      // A store rule ignores region — the store's own region is implicit.
+      region: form.store_id ? null : (form.region || null),
+      store_id: form.store_id || null,
       owner_id: form.owner_id,
     } as never)
     if (err) {
-      setError(err.message.includes('department_routing_unique')
-        ? `A rule for ${form.department} in ${form.region || 'All regions'} already exists — delete it first.`
-        : err.message)
+      setError(
+        err.message.includes('department_routing_store_uniq')
+          ? `A rule for ${form.department} at this store already exists — delete it first.`
+          : err.message.includes('department_routing_region_uniq')
+            ? `A rule for ${form.department} in ${form.region || 'All regions'} already exists — delete it first.`
+            : err.message,
+      )
     } else {
       setForm((f) => ({ ...f, owner_id: '' }))
       await fetchAll()
@@ -91,7 +105,7 @@ export default function RoutingPage() {
     <AppShell
       overline="Automation"
       title="Ticket Routing"
-      subtitle="Who owns each department's tickets, per region. New tickets are auto-assigned and notified instantly."
+      subtitle="Who owns each department's tickets, per store or region. New tickets are auto-assigned and notified instantly."
     >
       <div className="grid gap-5 grid-cols-1 lg:grid-cols-[380px_1fr] items-start">
         {/* Add rule */}
@@ -112,11 +126,26 @@ export default function RoutingPage() {
                 <label className={labelClass}>Region</label>
                 <select
                   value={form.region}
+                  disabled={!!form.store_id}
                   onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))}
                   className="prism-input"
+                  style={form.store_id ? { opacity: 0.5 } : undefined}
                 >
                   <option value="">All regions (fallback)</option>
                   {regions.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Store (optional — overrides region)</label>
+                <select
+                  value={form.store_id}
+                  onChange={(e) => setForm((f) => ({ ...f, store_id: e.target.value }))}
+                  className="prism-input"
+                >
+                  <option value="">No store override</option>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>{s.store_name} · {s.store_code}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -138,8 +167,7 @@ export default function RoutingPage() {
                   </optgroup>
                 </select>
                 <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">
-                  They&apos;ll be auto-assigned + emailed for every new {form.department} ticket
-                  {form.region ? ` in ${form.region}` : ' (when no region rule matches)'}.
+                  They&apos;ll be auto-assigned + emailed for every new {form.department} ticket in {scopeLabel}.
                 </p>
               </div>
 
@@ -170,7 +198,7 @@ export default function RoutingPage() {
               <p className="text-[14px] font-semibold text-[var(--text-secondary)] mb-1">No routing rules yet</p>
               <p className="text-xs text-[var(--text-muted)] max-w-[400px] mx-auto">
                 Until rules are added, new tickets stay unassigned in the department queue.
-                Add one owner per department (plus regional overrides where needed).
+                Add one owner per department (plus store or region overrides where needed).
               </p>
             </GlassPanel>
           ) : (
@@ -178,42 +206,50 @@ export default function RoutingPage() {
               <GlassPanel key={dept} padding="md" title={dept}>
                 <div className="flex flex-col gap-2">
                   {(byDepartment.get(dept) ?? [])
-                    .sort((a, b) => (a.region ?? '').localeCompare(b.region ?? ''))
-                    .map((r) => (
-                      <div
-                        key={r.id}
-                        className="flex items-center gap-3 px-3.5 py-2.5 rounded-[10px]"
-                        style={{ background: 'var(--card-bg)', border: '1px solid var(--border-subtle)' }}
-                      >
-                        <span
-                          className="w-8 h-8 rounded-[9px] flex items-center justify-center shrink-0"
-                          style={{
-                            color: r.region ? 'var(--accent)' : 'var(--color-info)',
-                            background: 'var(--bg-tertiary)',
-                          }}
+                    .slice()
+                    .sort((a, b) => {
+                      const as = a.store_id ? 0 : 1, bs = b.store_id ? 0 : 1
+                      if (as !== bs) return as - bs
+                      return (a.region ?? '').localeCompare(b.region ?? '')
+                    })
+                    .map((r) => {
+                      const store = r.store_id ? storesById.get(r.store_id) : null
+                      return (
+                        <div
+                          key={r.id}
+                          className="flex items-center gap-3 px-3.5 py-2.5 rounded-[10px]"
+                          style={{ background: 'var(--card-bg)', border: '1px solid var(--border-subtle)' }}
                         >
-                          {r.region ? <MapPin size={14} /> : <Globe2 size={14} />}
-                        </span>
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-[13px] font-semibold text-[var(--text-primary)] truncate">
-                            {r.owner?.name ?? 'Unknown user'}
-                          </span>
-                          <span className="block text-[11px] text-[var(--text-muted)]">
-                            {r.region ?? 'All regions (fallback)'}
-                            {r.owner?.email ? ` · ${r.owner.email}` : ''}
-                          </span>
-                        </span>
-                        {canEdit && (
-                          <button
-                            aria-label="Delete rule"
-                            onClick={() => removeRule(r.id)}
-                            className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--color-danger)] transition-colors shrink-0"
+                          <span
+                            className="w-8 h-8 rounded-[9px] flex items-center justify-center shrink-0"
+                            style={{
+                              color: store ? 'var(--accent)' : r.region ? 'var(--color-info)' : 'var(--text-muted)',
+                              background: 'var(--bg-tertiary)',
+                            }}
                           >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                            {store ? <Building2 size={14} /> : r.region ? <MapPin size={14} /> : <Globe2 size={14} />}
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[13px] font-semibold text-[var(--text-primary)] truncate">
+                              {r.owner?.name ?? 'Unknown user'}
+                            </span>
+                            <span className="block text-[11px] text-[var(--text-muted)] truncate">
+                              {store ? `${store.store_name} · ${store.store_code}` : r.region ?? 'All regions (fallback)'}
+                              {r.owner?.email ? ` · ${r.owner.email}` : ''}
+                            </span>
+                          </span>
+                          {canEdit && (
+                            <button
+                              aria-label="Delete rule"
+                              onClick={() => removeRule(r.id)}
+                              className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--color-danger)] transition-colors shrink-0"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
                 </div>
               </GlassPanel>
             ))
