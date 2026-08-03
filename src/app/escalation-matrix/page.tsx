@@ -661,11 +661,17 @@ function BulkImportPanel({
       {open && (
         <div className="flex flex-col gap-3 mt-4">
           <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-            Add many rungs at once. Columns: <code className="font-mono-value text-[11px]">{CSV_HEADER}</code>.
-            Region/severity blank = all. <code className="font-mono-value text-[11px]">people_emails</code> is a
-            {' '}<code className="font-mono-value text-[11px]">;</code>-separated list, matched against dashboard users
-            and the Prism Platform employee roster by email.
+            Add many rungs at once — download the template, fill it in, then upload it.
+            Region and severity blank mean &ldquo;all&rdquo;; <code className="font-mono-value text-[11px]">people_emails</code> is
+            {' '}a semicolon-separated list, matched against dashboard users and the Prism Platform employee roster by email.
           </p>
+
+          <code
+            className="block text-[10px] font-mono px-2.5 py-1.5 rounded-[6px] leading-relaxed overflow-x-auto whitespace-nowrap"
+            style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}
+          >
+            {CSV_HEADER}
+          </code>
 
           <div className="flex items-center gap-2 flex-wrap">
             <Button variant="ghost" size="sm" type="button" onClick={downloadTemplate}>
