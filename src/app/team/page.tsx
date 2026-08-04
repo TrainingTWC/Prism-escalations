@@ -275,7 +275,7 @@ export default function TeamPage() {
                 ? formatDistanceToNow(new Date(roster.lastSync), { addSuffix: true })
                 : 'Not yet synced'}
             </p>
-            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Auto-syncs every 5 days</p>
+            <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Auto-syncs daily at 01:30 IST</p>
           </GlassPanel>
         </div>
 

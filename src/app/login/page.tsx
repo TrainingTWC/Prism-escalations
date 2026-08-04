@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { Mail, Lock, AlertCircle } from 'lucide-react'
 import { PrismLogo } from '@/components/ui/PrismLogo'
@@ -136,6 +137,20 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          <Link
+            href="/login/setup"
+            className="mt-5 block text-center text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+          >
+            First time here? Set up your account
+          </Link>
+
+          <a
+            href="https://app.prismintelligence.in/login?redirect_uri=https%3A%2F%2Fescalations.prismintelligence.in%2Fsso%2Fcallback&app=escalations"
+            className="mt-3 block text-center text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
+          >
+            Sign in with Prism
+          </a>
         </div>
 
         <p className="text-center mt-6 text-[11px] uppercase tracking-[0.15em] text-[var(--text-muted)]">
