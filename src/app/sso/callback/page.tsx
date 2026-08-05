@@ -46,7 +46,6 @@ function SsoCallbackInner() {
       const { error: verifyError } = await supabase.auth.verifyOtp({
         type: 'magiclink',
         token_hash: data.token_hash,
-        email: data.email,
       })
       if (verifyError) {
         setError(verifyError.message)
