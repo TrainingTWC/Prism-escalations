@@ -65,7 +65,9 @@ function SsoCallbackInner() {
       style={{ background: 'var(--bg-primary)' }}
     >
       <div className="glass p-8 max-w-[420px] w-full text-center">
-        <AlertCircle size={20} className="mx-auto mb-3 text-[var(--color-danger)]" />
+        <div className="mx-auto mb-3 flex items-center justify-center">
+          <AlertCircle size={20} className="text-[var(--color-danger)]" />
+        </div>
         <p className="text-[13px] text-[var(--color-danger)] mb-4">{error}</p>
         <a href="/login" className="text-[12px] text-[var(--text-secondary)] hover:underline">
           Back to sign in
@@ -82,8 +84,10 @@ function SsoStatus() {
       style={{ background: 'var(--bg-primary)' }}
     >
       <div className="text-center">
-        <PrismLogo size={48} />
-        <p className="mt-4 text-[12px] text-[var(--text-muted)]">Signing you in…</p>
+        <div className="mx-auto mb-5 flex items-center justify-center">
+          <PrismLogo size={48} />
+        </div>
+        <p className="text-[12px] text-[var(--text-muted)]">Signing you in…</p>
       </div>
     </div>
   )
