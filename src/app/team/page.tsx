@@ -199,12 +199,13 @@ function ScopeEditor({
 export default function TeamPage() {
   const { profile: self } = useAuthStore()
   const isSuperAdmin = self?.role === 'super_admin'
-  const canInvite = isSuperAdmin || self?.role === 'leadership'
+  const canProvision = isSuperAdmin || self?.role === 'leadership'
 
   const [profiles, setProfiles] = useState<ProfileRow[]>([])
   const [stores, setStores] = useState<{ id: string; store_name: string; store_code: string }[]>([])
   const [regions, setRegions] = useState<string[]>([])
   const [roster, setRoster] = useState<RosterStats>({ total: 0, active: 0, lastSync: null })
+  const [unprovisioned, setUnprovisioned] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchAll = useCallback(async () => {
@@ -214,7 +215,8 @@ export default function TeamPage() {
       supabase.from('stores').select('id, store_name, store_code, region').order('store_name'),
     ])
 
-    setProfiles((profs as ProfileRow[]) || [])
+    const profRows = (profs as ProfileRow[]) || []
+    setProfiles(profRows)
     const sRows = (storeRows as { id: string; store_name: string; store_code: string; region: string }[] | null) ?? []
     setStores(sRows)
     setRegions(Array.from(new Set(sRows.map((s) => s.region))).sort())
@@ -225,8 +227,14 @@ export default function TeamPage() {
       setRoster({ total: total ?? 0, active: active ?? 0, lastSync: rosterData[0].last_synced_at })
     }
 
+    // How many active employees still lack an account — drives the provisioning panel.
+    if (canProvision) {
+      const { data: pending } = await supabase.rpc('unprovisioned_roster_count')
+      setUnprovisioned(typeof pending === 'number' ? pending : 0)
+    }
+
     setLoading(false)
-  }, [])
+  }, [canProvision])
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
@@ -279,9 +287,9 @@ export default function TeamPage() {
           </GlassPanel>
         </div>
 
-        {/* Invite a dashboard user */}
-        {canInvite && (
-          <InvitePanel stores={stores} regions={regions} callerRole={self?.role ?? ''} onInvited={fetchAll} />
+        {/* Provision dashboard users from the employee master */}
+        {canProvision && (
+          <ProvisionPanel pending={unprovisioned} onDone={fetchAll} />
         )}
 
         {/* Role breakdown */}
@@ -436,173 +444,131 @@ export default function TeamPage() {
   )
 }
 
-const DEFAULT_INVITE_FORM = { name: '', email: '', role: 'store_team', department: '', region: '', store_id: '' }
+// One invocation of provision-roster-users only creates up to 400 accounts, so
+// the first run over a ~2,200-person roster is a loop. This cap is a guard
+// against looping forever if the backlog somehow never drains.
+const MAX_PROVISION_BATCHES = 20
 
-function InvitePanel({
-  stores, regions, callerRole, onInvited,
-}: {
-  stores: { id: string; store_name: string; store_code: string }[]
-  regions: string[]
-  callerRole: string
-  onInvited: () => Promise<void>
-}) {
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState(DEFAULT_INVITE_FORM)
-  const [sending, setSending] = useState(false)
+interface ProvisionResult {
+  ok?: boolean
+  created?: number
+  linked?: number
+  failed?: number
+  failures?: { email: string; reason: string }[]
+  remaining?: number
+  departed?: { deactivated: number; reactivated: number } | null
+  error?: string
+}
+
+function ProvisionPanel({ pending, onDone }: { pending: number | null; onDone: () => Promise<void> }) {
+  const [running, setRunning] = useState(false)
+  const [progress, setProgress] = useState('')
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [summary, setSummary] = useState('')
 
-  const invitableRoles = callerRole === 'super_admin' ? ROLES : ROLES.filter((r) => r.value !== 'super_admin')
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.name.trim() || !form.email.trim() || sending) return
-    setSending(true)
+  const run = async () => {
+    setRunning(true)
     setError('')
-    setSuccess('')
+    setSummary('')
 
-    const { data, error: fnErr } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>('invite-user', {
-      body: {
-        name: form.name.trim(),
-        email: form.email.trim(),
-        role: form.role,
-        department: form.role === 'dept_owner' ? (form.department || null) : null,
-        region: form.role === 'area_manager' ? (form.region || null) : null,
-        store_id: (form.role === 'store_team' || form.role === 'store_manager') ? (form.store_id || null) : null,
-      },
-    })
+    let created = 0
+    let linked = 0
+    let failed = 0
+    let firstFailure = ''
+    let departed: { deactivated: number; reactivated: number } | null = null
 
-    let message = data?.error ?? fnErr?.message
-    if (!message && fnErr) {
-      const ctx = (fnErr as unknown as { context?: Response }).context
-      if (ctx) {
-        try { message = (await ctx.json())?.error } catch { /* ignore */ }
+    for (let batch = 0; batch < MAX_PROVISION_BATCHES; batch++) {
+      setProgress(created === 0 ? 'Starting…' : `${created} accounts created…`)
+
+      const { data, error: fnErr } = await supabase.functions.invoke<ProvisionResult>(
+        'provision-roster-users',
+        { body: { limit: 400 } },
+      )
+
+      let message = data?.error ?? fnErr?.message
+      if (!message && fnErr) {
+        const ctx = (fnErr as unknown as { context?: Response }).context
+        if (ctx) {
+          try { message = (await ctx.json())?.error } catch { /* ignore */ }
+        }
       }
+      if (message) {
+        setError(message)
+        setProgress('')
+        setRunning(false)
+        return
+      }
+
+      created += data?.created ?? 0
+      linked += data?.linked ?? 0
+      failed += data?.failed ?? 0
+      if (!firstFailure && data?.failures?.length) {
+        firstFailure = `${data.failures[0].email}: ${data.failures[0].reason}`
+      }
+      if (data?.departed) departed = data.departed
+
+      if (!data?.remaining) break
     }
 
-    if (message) {
-      setError(message)
-      setSending(false)
-      return
-    }
+    const parts = [`${created} account${created === 1 ? '' : 's'} created`]
+    if (linked) parts.push(`${linked} existing account${linked === 1 ? '' : 's'} linked to the roster`)
+    if (departed?.deactivated) parts.push(`${departed.deactivated} leaver${departed.deactivated === 1 ? '' : 's'} deactivated`)
+    if (departed?.reactivated) parts.push(`${departed.reactivated} rejoiner${departed.reactivated === 1 ? '' : 's'} reactivated`)
+    if (failed) parts.push(`${failed} failed${firstFailure ? ` (first: ${firstFailure})` : ''}`)
 
-    setSuccess(`Invite sent to ${form.email}`)
-    setForm(DEFAULT_INVITE_FORM)
-    setSending(false)
-    await onInvited()
+    setSummary(`${parts.join(' · ')}. No emails were sent.`)
+    setProgress('')
+    setRunning(false)
+    await onDone()
   }
 
   return (
-    <GlassPanel padding="md">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[var(--text-primary)]">
-          <UserPlus size={13} /> Invite a dashboard user
+    <GlassPanel padding="md" title={
+      <span className="inline-flex items-center gap-1.5">
+        <UserPlus size={13} /> Provision dashboard users
+      </span>
+    }>
+      <p className="text-[11px] text-[var(--text-muted)] leading-relaxed mb-3">
+        Every active employee on the master gets a dashboard account, so they can be picked as
+        a ticket owner before they&apos;ve ever opened the app. Accounts are created silently —
+        no invitation, no password, <strong className="text-[var(--text-secondary)]">no email of any kind</strong>.
+        People get in via Prism Platform SSO, or by setting a password at
+        <code className="mx-1 text-[10px] font-mono px-1 py-0.5 rounded" style={{ background: 'var(--bg-tertiary)', color: 'var(--accent)' }}>/login/setup</code>.
+        Everyone lands as Store Team; raise anyone&apos;s role below.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="primary" onClick={run} disabled={running || pending === 0} className="justify-center">
+          <UserPlus size={14} />
+          {running ? (progress || 'Provisioning…') : 'Provision now'}
+        </Button>
+        <span className="text-[11px] text-[var(--text-muted)]">
+          {pending === null
+            ? '—'
+            : pending === 0
+              ? 'Everyone on the active roster already has an account.'
+              : `${pending} active employee${pending === 1 ? '' : 's'} without an account.`}
         </span>
-        <ChevronDown size={14} className="text-[var(--text-muted)] transition-transform" style={{ transform: open ? 'rotate(180deg)' : undefined }} />
-      </button>
+      </div>
 
-      {open && (
-        <form onSubmit={submit} className="flex flex-col gap-3 mt-4">
-          <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-            Sends a Supabase invite email — they click the link and set their own password.
-            Once accepted they&apos;re assignable as a routing owner or escalation contact right away.
-          </p>
+      <p className="text-[10px] text-[var(--text-muted)] mt-2.5">
+        Runs automatically every night at 02:15 IST, after the roster sync — this button is only
+        for the initial backfill or when you don&apos;t want to wait.
+      </p>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Name</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Full name"
-                className="prism-input"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Email</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="name@thirdwavecoffee.in"
-                className="prism-input"
-                required
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Role</label>
-            <select
-              value={form.role}
-              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value, department: '', region: '', store_id: '' }))}
-              className="prism-input"
-            >
-              {invitableRoles.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
-          </div>
-
-          {form.role === 'dept_owner' && (
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Department</label>
-              <select
-                value={form.department}
-                onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
-                className="prism-input"
-              >
-                <option value="">No department</option>
-                {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-          )}
-          {form.role === 'area_manager' && (
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Region</label>
-              <select
-                value={form.region}
-                onChange={(e) => setForm((f) => ({ ...f, region: e.target.value }))}
-                className="prism-input"
-              >
-                <option value="">No region</option>
-                {regions.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-          )}
-          {(form.role === 'store_team' || form.role === 'store_manager') && (
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--text-tertiary)] mb-1.5">Store</label>
-              <select
-                value={form.store_id}
-                onChange={(e) => setForm((f) => ({ ...f, store_id: e.target.value }))}
-                className="prism-input"
-              >
-                <option value="">No store</option>
-                {stores.map((s) => <option key={s.id} value={s.id}>{s.store_name} · {s.store_code}</option>)}
-              </select>
-            </div>
-          )}
-
-          {error && (
-            <div className="flex items-start gap-2 px-3 py-2 rounded-lg"
-                 style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.20)' }}>
-              <AlertCircle size={13} className="text-[var(--color-danger)] shrink-0 mt-0.5" />
-              <span className="text-[11px] text-[var(--color-danger)]">{error}</span>
-            </div>
-          )}
-          {success && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
-                 style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
-              <CheckCircle2 size={13} style={{ color: 'var(--color-success)' }} />
-              <span className="text-[11px] text-[var(--text-secondary)]">{success}</span>
-            </div>
-          )}
-
-          <Button type="submit" variant="primary" disabled={sending || !form.name.trim() || !form.email.trim()} className="justify-center">
-            <UserPlus size={14} /> {sending ? 'Sending…' : 'Send invite'}
-          </Button>
-        </form>
+      {error && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg mt-3"
+             style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.20)' }}>
+          <AlertCircle size={13} className="text-[var(--color-danger)] shrink-0 mt-0.5" />
+          <span className="text-[11px] text-[var(--color-danger)]">{error}</span>
+        </div>
+      )}
+      {summary && (
+        <div className="flex items-start gap-2 px-3 py-2 rounded-lg mt-3"
+             style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+          <CheckCircle2 size={13} style={{ color: 'var(--color-success)' }} className="shrink-0 mt-0.5" />
+          <span className="text-[11px] text-[var(--text-secondary)]">{summary}</span>
+        </div>
       )}
     </GlassPanel>
   )

@@ -1,15 +1,20 @@
 // Supabase Edge Function: self-signup
 // ---------------------------------------------------------------------------
-// First-time login setup for ordinary store staff. Unlike invite-user (which
-// requires a super_admin/leadership caller), this is public — anyone can call
-// it — but it only creates an account if the email matches an ACTIVE row in
-// employee_roster (synced daily from Prism Platform). That roster match is
-// the entire gate: this is what "anyone on the employee master can log in"
-// means in practice, without letting literally anyone self-register.
+// First-time login setup for staff who aren't coming in via Prism Platform
+// SSO. This is public — anyone can call it — but it only proceeds if the
+// email matches an ACTIVE row in employee_roster (synced daily from Prism
+// Platform). That roster match is the entire gate: this is what "anyone on
+// the employee master can log in" means in practice, without letting
+// literally anyone self-register.
+//
+// Most callers won't be creating anything: provision-roster-users has
+// already made a passwordless account for every active employee, so this
+// mostly sets the password on an account that exists but has never been
+// signed into. There is no invitation email anywhere in this flow.
 //
 // New accounts always land as role=store_team (least privilege). Elevated
 // roles (dept_owner, area_manager, leadership, super_admin, store_manager)
-// stay admin-invite-only via invite-user.
+// are granted by hand on the Team page.
 //
 // JWT verification is OFF for this function (there's no session yet) —
 // deploy with --no-verify-jwt, same as send-email/audit-ingest.
@@ -97,6 +102,41 @@ Deno.serve(async (req: Request) => {
     store_id = store?.id ?? null;
   }
 
+  const scope = {
+    emp_id: employee.emp_id,
+    department: employee.department,
+    region: employee.region,
+    store_id,
+  };
+
+  // Since provision-roster-users runs nightly, the overwhelming case is that an
+  // account ALREADY exists for this person — created silently, with no password,
+  // never touched. "First-time setup" then means claiming it, not creating it.
+  const { data: existingProfile } = await admin
+    .from("profiles")
+    .select("id")
+    .ilike("email", email)
+    .maybeSingle();
+
+  if (existingProfile) {
+    const { data: existingUser } = await admin.auth.admin.getUserById(existingProfile.id);
+
+    // A sign-in on record means this is a live account with a password its owner
+    // knows — sending them down the reset path is the only safe answer.
+    if (existingUser?.user?.last_sign_in_at) {
+      return json({ error: `${email} already has an account — sign in instead.` }, 409, cors);
+    }
+
+    const { error: pwErr } = await admin.auth.admin.updateUserById(existingProfile.id, {
+      password,
+      email_confirm: true,
+    });
+    if (pwErr) return json({ error: pwErr.message }, 500, cors);
+
+    await admin.from("profiles").update(scope).eq("id", existingProfile.id);
+    return json({ ok: true }, 200, cors);
+  }
+
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email,
     password,
@@ -116,10 +156,7 @@ Deno.serve(async (req: Request) => {
 
   // handle_new_user() already created the profiles row from the metadata above;
   // patch in the roster-derived scope fields it doesn't know about.
-  await admin
-    .from("profiles")
-    .update({ emp_id: employee.emp_id, department: employee.department, region: employee.region, store_id })
-    .eq("id", created.user.id);
+  await admin.from("profiles").update(scope).eq("id", created.user.id);
 
   return json({ ok: true }, 200, cors);
 });
