@@ -767,7 +767,7 @@ function TicketDetailInner() {
 
                   {ticket.intelligence_submission_id && (
                     <a
-                      href={`${process.env.NEXT_PUBLIC_INTELLIGENCE_APP_URL ?? '#'}/submissions/${ticket.intelligence_submission_id}`}
+                      href={`${process.env.NEXT_PUBLIC_INTELLIGENCE_APP_URL || 'https://app.prismintelligence.in'}/audits/submission/${ticket.intelligence_submission_id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center justify-center gap-1.5 text-[11px] font-semibold rounded-[8px] py-2 transition-colors"
