@@ -130,8 +130,8 @@ function NewTicketInner() {
     setLoading(true)
     setError('')
 
-    const ticket_code = `TKT-${Date.now().toString(36).toUpperCase()}`
-
+    // ticket_code is assigned server-side by the assign_ticket_code trigger
+    // (DEPT-AUDITCODE-NNNN, see supabase/migration_ticket_code_department.sql)
     // assigned_to + sla_deadline are stamped by the DB (routing table + severity)
     const { data: created, error: insertError } = await supabase
       .from('tickets')
@@ -142,7 +142,6 @@ function NewTicketInner() {
         sub_category: form.sub_category || null,
         severity: form.severity,
         store_id: form.store_id,
-        ticket_code,
         raised_by: profile.id,
         source_type: 'store',
         status: 'open',
